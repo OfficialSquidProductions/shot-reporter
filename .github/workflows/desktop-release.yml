@@ -43,7 +43,7 @@ jobs:
         with:
           distribution: temurin
           # setup-java's normalized SemVer for Temurin21.0.12.1+1; staging verifies the actual release file.
-          java-version: '21.0.12+101.0'
+          java-version: '21.0.12+101.0.LTS'
       - name: Fast native updater preflight against the previous public unsigned MSI
         env:
           GH_TOKEN: ${{ github.token }}
