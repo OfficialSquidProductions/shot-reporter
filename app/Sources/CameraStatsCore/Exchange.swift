@@ -51,7 +51,7 @@ public enum Exchange {
         var conflicts = incoming.report.entries.compactMap { e -> String? in guard let old = known[e.id], old != e else { return nil }; return "Scene \(e.values["scene",default:"?"]) / take \(e.values["take",default:"?"]) (\(e.id.prefix(8)))" }
         if local.values != incoming.report.values { conflicts.append("Project / crew metadata") }
         if local.defaults != incoming.report.defaults { conflicts.append("Camera defaults") }
-        if local.profile != incoming.report.profile || local.positions != incoming.report.positions || local.namingTemplate != incoming.report.namingTemplate || local.namingSettings != incoming.report.namingSettings { conflicts.append("Report profile / positions / naming preset") }
+        if local.profile != incoming.report.profile || local.positions != incoming.report.positions || local.namingTemplate != incoming.report.namingTemplate || local.namingSettings != incoming.report.namingSettings { conflicts.append("Report settings / preserved legacy data") }
         return Preview(additions:additions,conflicts:conflicts,duplicate:false)
     }
     // This conservative alpha merges independent additions only. Competing edits are retained in the imported file, never silently resolved.

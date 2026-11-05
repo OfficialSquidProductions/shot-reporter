@@ -1,3 +1,5 @@
+> Historical validation for the named releases. Re-run relevant checks for the current [reporting scope](REPORTING_SCOPE.md) before any new release.
+
 # 0.1.0 owner-test field alpha
 
 Validated on 2026-10-19 with Xcode 26.6 / Swift 6.3.3.
@@ -13,7 +15,7 @@ Validated on 2026-10-19 with Xcode 26.6 / Swift 6.3.3.
 
 ## Remaining validation
 
-Physical iPhone/iPad use and full interactive Mac document workflows need owner testing. Camera connection, media ingestion, slate OCR, exact-frame footage browsing, physical RAW renaming and certified NLE adapters are outside this field-alpha milestone. No camera or NLE hardware support is claimed.
+Physical iPhone/iPad use and full interactive Mac document workflows need owner testing. Shot Reporter reports entered production information; no camera hardware support is claimed.
 
 The first Mac TestFlight upload warned that debug symbols were missing. Upload succeeded, but native Mac crash symbolication is limited in build 1; future archives must include dSYMs.
 
@@ -29,4 +31,4 @@ The first Mac TestFlight upload warned that debug symbols were missing. Upload s
 - Full native/interoperability run [39303095878](https://github.com/OfficialSquidProductions/shot-reporter/actions/runs/39303095878) passed on source `9ed917c1ca18dbd389a7af1317883747fa2fcb6c`, including all 23 unchanged Apple regression tests and actual Windows-exported package reads. Signed-release run [39303095861](https://github.com/OfficialSquidProductions/shot-reporter/actions/runs/39303095861) passed both device sizes. Final source's unsigned Android APK is byte-identical to the input used for the tested signed candidate.
 - Original dependency notice resources are retained; additional pinned notices are bundled and locally viewable. Windows checkout must preserve original notice bytes and the checker must stop the build on failure.
 
-No physical Android device, lower Android API baseline, 12-hour field day, full-storage power interruption or real camera/media/NLE certification is claimed.
+No physical Android device, lower Android API baseline, 12-hour field day, full-storage power interruption or camera hardware certification is claimed.

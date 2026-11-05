@@ -6,7 +6,7 @@ import plistlib
 import subprocess
 import tempfile
 import unittest
-from verify_macos_entitlements import verify_entitlement_policy, read_entitlements, DOWNLOADER, INSTALLER, JAVA
+from verify_macos_entitlements import verify_entitlement_policy, read_entitlements, DOWNLOADER, INSTALLER
 
 spec = importlib.util.spec_from_file_location('prepare', Path(__file__).with_name('prepare_macos_desktop_release.py'))
 prepare = importlib.util.module_from_spec(spec)
@@ -16,21 +16,20 @@ spec.loader.exec_module(prepare)
 class MacSigningPolicyTests(unittest.TestCase):
     def fixture(self):
         app = Path('/isolated/fixture.app')
-        rights = {app: {'com.apple.security.app-sandbox': True}, app / INSTALLER: {}, app / JAVA: {'com.apple.security.cs.allow-jit': True, 'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True}}
+        rights = {app: {'com.apple.security.app-sandbox': True}, app / INSTALLER: {}}
         for path in [app / DOWNLOADER, app / DOWNLOADER / 'Contents/MacOS/Downloader']:
             rights[path] = {'com.apple.security.app-sandbox': True, 'com.apple.security.network.client': True}
         return app, rights
 
-    def test_only_exact_downloader_and_java_receive_explicit_profiles(self):
+    def test_only_exact_downloader_receives_explicit_profile(self):
         self.assertEqual(prepare.macho_entitlement_profile(prepare.DOWNLOADER_EXECUTABLE), 'downloader.plist')
-        self.assertEqual(prepare.macho_entitlement_profile(JAVA), 'java.plist')
         for path in [INSTALLER + '/Contents/MacOS/Installer', 'Contents/MacOS/Shot Reporter', 'other/Downloader', prepare.DOWNLOADER_EXECUTABLE + '.extra']:
             self.assertIsNone(prepare.macho_entitlement_profile(path))
 
     def test_final_policy_rejects_stripped_downloader_and_expanded_other_privileges(self):
         app, rights = self.fixture()
         verify_entitlement_policy(app, reader=rights.__getitem__)
-        for path, replacement in [(app / DOWNLOADER, {}), (app / DOWNLOADER / 'Contents/MacOS/Downloader', {}), (app / INSTALLER, {'com.apple.security.app-sandbox': True}), (app, {'com.apple.security.app-sandbox': True, 'com.apple.security.network.client': True}), (app / JAVA, {**rights[app / JAVA], 'com.apple.security.cs.disable-library-validation': True})]:
+        for path, replacement in [(app / DOWNLOADER, {}), (app / DOWNLOADER / 'Contents/MacOS/Downloader', {}), (app / INSTALLER, {'com.apple.security.app-sandbox': True}), (app, {'com.apple.security.app-sandbox': True, 'com.apple.security.network.client': True})]:
             changed = dict(rights); changed[path] = replacement
             with self.subTest(path=str(path)), self.assertRaises(ValueError):
                 verify_entitlement_policy(app, reader=changed.__getitem__)

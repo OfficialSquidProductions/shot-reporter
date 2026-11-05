@@ -8,7 +8,6 @@ import subprocess
 
 DOWNLOADER = 'Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc'
 INSTALLER = 'Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc'
-JAVA = 'Contents/Resources/DesktopMedia/runtime/bin/java'
 
 
 def read_entitlements(path):
@@ -26,7 +25,6 @@ def verify_entitlement_policy(app, *, host_sandboxed=True, reader=read_entitleme
     downloader = reader(app / DOWNLOADER)
     downloader_executable = reader(app / DOWNLOADER / 'Contents/MacOS/Downloader')
     installer = reader(app / INSTALLER)
-    java = reader(app / JAVA)
     expected_downloader = {'com.apple.security.app-sandbox': True, 'com.apple.security.network.client': True}
     if downloader != expected_downloader or downloader_executable != expected_downloader:
         raise ValueError('Downloader executable and bundle must retain the explicit sandbox/network-client profile')
@@ -36,12 +34,7 @@ def verify_entitlement_policy(app, *, host_sandboxed=True, reader=read_entitleme
         raise ValueError('Host sandbox policy changed')
     if host.get('com.apple.security.network.client', False) is not False:
         raise ValueError('Host must not gain network-client rights')
-    expected_java = {'com.apple.security.cs.allow-jit': True}
-    if host_sandboxed:
-        expected_java.update({'com.apple.security.app-sandbox': True, 'com.apple.security.inherit': True})
-    if java != expected_java:
-        raise ValueError('Java must retain only reviewed JIT/sandbox-inheritance rights')
-    return {'host': host, 'downloader': downloader, 'installer': installer, 'java': java}
+    return {'host': host, 'downloader': downloader, 'installer': installer}
 
 
 if __name__ == '__main__':

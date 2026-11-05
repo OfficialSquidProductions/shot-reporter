@@ -60,13 +60,21 @@ class CoreTests {
         for(size in listOf(0,1,21,32,100,archive.size-5)) assertFails { Exchange.read(archive.copyOf(size)) }
         val r=Exchange.read(archive).report;assertFails { Exchange.read(Exchange.export(r.copy(entries=r.entries+ r.entries.first()),"Test")) }
     }
-    @Test fun unicodeEscapingLongNotesAndPortableNames() {
+    @Test fun unicodeEscapingAndLongNotes() {
         val report=Exchange.read(fixture()).report;val e=report.entries.first().copy(values=report.entries.first().values+("remarks" to "a,\"b\"\n<script>alert(1)</script> カメラ"));val r=report.copy(entries=listOf(e))
         assertTrue(Reports.csv(r).contains("\"a,\"\"b\"\""));assertTrue(Reports.html(r).contains("&lt;script&gt;"));assertFalse(Reports.html(r).contains("<script>"))
-        assertTrue(Reports.printable(r).joinToString("\n").contains("カメラ"));assertTrue(Naming.preview(Naming.movie,r,e).contains("SC3A"))
-        assertFails { Naming.preview("CON",r,e) };assertFails { Naming.preview("{missing}",r,e) };assertFails { Naming.preview("../../footage",r,e) }
+        assertTrue(Reports.printable(r).joinToString("\n").contains("カメラ"))
         val long=r.copy(entries=listOf(e.copy(values=e.values+("remarks" to "Long note ".repeat(10000)+"FINAL-MARKER"))))
         assertTrue(Reports.printable(long).last { it.startsWith("Camera remarks:") }.endsWith("FINAL-MARKER"))
+    }
+    @Test fun legacyCompatibilityDataSurvivesReportEditsAndExports() {
+        val legacy=Exchange.read(fixture()).report.copy(namingTemplate="legacy {opaque} value")
+        val restored=Exchange.read(Exchange.export(legacy,"Compatibility test")).report
+        val edited=restored.next("3A","Compatibility test")
+        assertEquals(legacy.namingTemplate,Exchange.read(Exchange.export(edited,"Compatibility test")).report.namingTemplate)
+        val competing=Exchange.read(Exchange.export(legacy.copy(namingTemplate="other legacy value"),"Compatibility test"))
+        assertTrue(Exchange.preview(legacy,competing).conflicts.isNotEmpty())
+        assertFails {Exchange.merge(legacy,competing,"Compatibility test")}
     }
     @Test fun thousandTakeAppleFixtureRetainsFields() {
         val r=Exchange.read(fixture("swift-1000-takes")).report;assertEquals(1000,r.active.size);assertEquals(r,Exchange.read(Exchange.export(r,"Scale fixture")).report)

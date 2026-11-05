@@ -10,6 +10,7 @@ public struct NamingSettings: Codable, Equatable {
     public struct Selection: Codable, Equatable {
         public var name: String
         public var reportTemplate: String
+        // Legacy archive field, retained verbatim for non-destructive round trips.
         public var copyTemplate: String
         public var disabled: Set<String> = []
         public init(name: String, reportTemplate: String, copyTemplate: String) {
@@ -24,7 +25,7 @@ public struct NamingSettings: Codable, Equatable {
             try container.encode(disabled.sorted(), forKey: .disabled)
         }
     }
-    public static let components = ["project", "season", "episode", "scene", "take", "camera", "roll", "original", "asset"]
+    public static let components = ["project", "season", "episode", "scene", "take", "camera", "roll"]
     public static let copyMovie = "{project}_SC{scene}_TK{take:03}_CAM-{camera}_{original}"
     public static let copyTV = "{project}_S{season:02}E{episode:02}_SC{scene}_TK{take:03}_CAM-{camera}_{original}"
     public var preset: Preset { didSet {savedPresetID = nil} }
@@ -62,13 +63,12 @@ public struct NamingSettings: Codable, Equatable {
         if enabled {
             let segment = Self.segment(component, padded: false)
             if !Self.tokens(value.reportTemplate).contains(component), !["original", "asset"].contains(component) { value.reportTemplate += "_" + segment }
-            if !Self.tokens(value.copyTemplate).contains(component) { value.copyTemplate += "_" + Self.segment(component, padded: true) }
         }
         selection = value
     }
     public var reportTemplate: String { filtered(selection.reportTemplate) }
     public var copyTemplate: String { filtered(selection.copyTemplate) }
-    public func includes(_ component: String) -> Bool { Self.tokens(reportTemplate + copyTemplate).contains(component) }
+    public func includes(_ component: String) -> Bool { Self.tokens(reportTemplate).contains(component) }
     public func filtered(_ template: String) -> String {
         let disabled = selection.disabled.union(preset == .movie ? ["season", "episode"] : [])
         return template.components(separatedBy: "_").compactMap { segment -> String? in

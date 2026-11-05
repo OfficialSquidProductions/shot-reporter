@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+from report_bundle_policy import reject_retired_resource
 
 APP_ID='org.squidproductions.camerastats'
 TEAM='FZ298DXLS3'
@@ -38,6 +39,7 @@ def inspect_archive(path):
         names=archive.namelist()
         if len(names)!=len(set(names)):raise ValueError('Duplicate archive member')
         for entry in archive.infolist():
+            reject_retired_resource(entry.filename)
             parts=Path(entry.filename).parts
             if not parts or parts[0] not in ('Shot Reporter.app','__MACOSX') or '..' in parts or Path(entry.filename).is_absolute():raise ValueError('Unexpected archive member')
             if stat.S_ISLNK(entry.external_attr>>16):
@@ -46,7 +48,7 @@ def inspect_archive(path):
                 if '\x00' in target or target.startswith('/') or not resolved.startswith('Shot Reporter.app/'):raise ValueError('Archive symlink escapes application')
             if entry.filename.lower().endswith(('.braw','.r3d','.sidecar','.p12','.p8','.keystore')) or 'BlackmagicRawAPI.framework' in parts or parts[-1] in ('BlackmagicRawAPI.h','BlackmagicRawAPIDispatch.cpp'):raise ValueError('Restricted file in release archive')
         info=plistlib.loads(archive.read('Shot Reporter.app/Contents/Info.plist'))
-        manifest=json.loads(archive.read('Shot Reporter.app/Contents/Resources/DesktopMedia/DISTRIBUTION.json'))
+        manifest=json.loads(archive.read('Shot Reporter.app/Contents/Resources/DISTRIBUTION.json'))
     if info.get('CFBundleIdentifier')!=APP_ID or info.get('ShotReporterDistribution')!='direct':raise ValueError('Unexpected application/distribution')
     expected={'SUFeedURL':FEED,'SUPublicEDKey':PUBLIC_KEY,'SURequireSignedFeed':True,'SUVerifyUpdateBeforeExtraction':True,'SUAllowsAutomaticUpdates':False,'SUEnableDownloaderService':True,'SUSignedFeedFailureExpirationInterval':0}
     for key,value in expected.items():

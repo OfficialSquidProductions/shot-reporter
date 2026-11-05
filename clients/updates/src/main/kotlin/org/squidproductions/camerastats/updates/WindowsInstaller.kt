@@ -42,7 +42,7 @@ class WindowsInstallerLauncher:InstallerLauncher {
     }
 }
 class WindowsUpdateInstaller(private val policy:UpdatePolicy,private val launcher:InstallerLauncher=WindowsInstallerLauncher()) {
-    /** saveAndQuiesce must verify durable reports, back up databases and hold all media-worker locks until exit. */
+    /** saveAndQuiesce must verify durable reports and back up the report database before exit. */
     fun prepare(release:UpdateRelease,installer:Path,relaunch:Path,saveAndQuiesce:()->AutoCloseable):PreparedInstall {
         policy.validate();val asset=checkNotNull(release.windowsX64)
         check(Files.isRegularFile(installer,LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(installer) && Files.size(installer)==asset.size && sha256(installer).equals(asset.sha256,true)) {"Staged installer changed. Download it again."}

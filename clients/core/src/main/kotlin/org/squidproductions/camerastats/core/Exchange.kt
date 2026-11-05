@@ -61,7 +61,7 @@ object Exchange {
         val conflicts=incoming.report.entries.filter { it.id in known && known[it.id]!=it }.map { "Scene ${it.values["scene"] ?: "?"} / take ${it.values["take"] ?: "?"} (${it.id.take(8)})" }.toMutableList()
         if (local.values!=incoming.report.values) conflicts+="Project / crew metadata"
         if (local.defaults!=incoming.report.defaults) conflicts+="Camera defaults"
-        if (local.profile!=incoming.report.profile || local.positions!=incoming.report.positions || local.namingTemplate!=incoming.report.namingTemplate) conflicts+="Report profile / positions / naming preset"
+        if (local.profile!=incoming.report.profile || local.positions!=incoming.report.positions || local.namingTemplate!=incoming.report.namingTemplate) conflicts+="Report settings / legacy compatibility data"
         return Preview(additions,conflicts,false)
     }
     fun merge(local:Report,incoming:Package,device:String):Report {

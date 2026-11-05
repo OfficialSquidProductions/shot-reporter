@@ -1,15 +1,15 @@
-name: Desktop media development checks
+name: Desktop reporting development checks
 on:
   push:
-    branches: [desktop-media-workflow]
-    paths: ['clients/**', 'fixtures/media/**', 'tools/prepare_windows_media_test_tools.py', '.github/workflows/desktop-media-development.yml']
+    branches: [main]
+    paths: ['clients/**', '.github/workflows/desktop-reporting-development.yml']
 permissions:
   contents: read
 concurrency:
-  group: desktop-media-${{ github.ref }}
+  group: desktop-reporting-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  windows-media:
+  windows-reporting:
     runs-on: windows-2025
     timeout-minutes: 20
     env:
@@ -23,11 +23,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Prepare hash-pinned CI-only decoder tools
-        run: python tools/prepare_windows_media_test_tools.py
-      - name: Report regressions, media recovery, and desktop UI tests
+      - name: Report regressions and desktop UI tests
         working-directory: clients
-        run: ./gradlew.bat -PskipAndroid=true :core:test :jdbc:test :media-worker:test :desktop:test --no-daemon --console=plain
+        run: ./gradlew.bat -PskipAndroid=true :core:test :jdbc:test :updates:test :desktop:test --no-daemon --console=plain
       - name: Print test counts (no build or artifact uploads)
         if: always()
         run: |

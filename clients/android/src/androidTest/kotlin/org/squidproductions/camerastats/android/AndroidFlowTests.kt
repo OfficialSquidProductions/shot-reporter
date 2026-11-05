@@ -62,7 +62,10 @@ class AndroidFlowTests {
             intending(hasAction(Intent.ACTION_CREATE_DOCUMENT)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK,Intent().setData(uri)))
             intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK,Intent().setData(uri)))
             ui.onNodeWithText("Open The Last Light demo").performClick();val source=ui.activity.model.report;val oldSlot=ui.activity.model.slot
-            ui.onNodeWithText("Saves").performClick();ui.onNodeWithText("Save As .camreport").performClick();ui.waitForIdle()
+            ui.onNodeWithText("Saves").performClick()
+            ui.onNodeWithText("Naming preset",substring=true).assertDoesNotExist()
+            ui.onNodeWithText("Template",substring=false).assertDoesNotExist()
+            ui.onNodeWithText("Save As .camreport").performClick();ui.waitForIdle()
             val saved=resolver.openInputStream(uri)!!.use {it.readBytes()};assertEquals(source,Exchange.read(saved).report)
             ui.onNodeWithText("Import Save…").performClick();ui.onNodeWithText("Import preview").assertExists()
             ui.onNodeWithText("Open as separate editable report").performScrollTo().performClick();ui.waitForIdle()

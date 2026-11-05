@@ -13,7 +13,7 @@ spec=importlib.util.spec_from_file_location('stage',Path(__file__).with_name('st
 class MacFeedTests(unittest.TestCase):
     def test_correct_release_is_arm64_alpha_and_notes_are_in_signed_xml(self):
         version='0.2.0-alpha.3';url=stage.PREFIX+'v'+version+'/Shot-Reporter-Mac-arm64-'+version+'.zip'
-        raw=stage.feed_xml(version,5,url,1234,'A'*86+'==','Fixes media.\n<script>untrusted text</script>')
+        raw=stage.feed_xml(version,5,url,1234,'A'*86+'==','Fixes reports.\n<script>untrusted text</script>')
         item=ET.fromstring(raw).find('channel/item');namespace={'s':stage.SPARKLE}
         self.assertEqual(item.find('s:hardwareRequirements',namespace).text,'arm64')
         self.assertEqual(item.find('s:minimumSystemVersion',namespace).text,'14.0')

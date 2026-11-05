@@ -187,7 +187,7 @@ jobs:
         run: python3 tools/generate_cross_platform_fixtures.py
       - name: Read Windows-exported packages with unchanged Swift reader
         run: |
-          find validation-output -name 'kotlin-*.camreport' -exec /tmp/camerastats-fixture-tool verify {} \;
+          find validation-output -name 'kotlin-*.camreport' -exec python3 tools/generate_cross_platform_fixtures.py --verify {} +
           test "$(find validation-output -name 'kotlin-*.camreport' | wc -l | tr -d ' ')" = '2'
       - name: Existing Apple regression tests
         run: swift test --package-path app

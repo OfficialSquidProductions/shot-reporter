@@ -25,9 +25,7 @@ fun main(args:Array<String>) {
     if(args.firstOrNull()=="--verify-report-upgrade") {
         require(args.size==3);verifyReportUpgrade(Path.of(args[1]),Path.of(args[2]));return
     }
-    if(args.firstOrNull()=="--desktop-release-smoke") {require(args.size==3);windowsDesktopReleaseSmoke(Path.of(args[1]),Path.of(args[2]));return}
-    if(args.firstOrNull()=="--seed-desktop-upgrade-journal") {require(args.size==1);seedDesktopUpgradeJournal();return}
-    if(args.firstOrNull()=="--verify-desktop-upgrade") {require(args.size==3);verifyDesktopUpgrade(Path.of(args[1]),Path.of(args[2]));return}
+    if(args.firstOrNull()=="--desktop-release-smoke") {require(args.size==2);windowsDesktopReleaseSmoke(Path.of(args[1]));return}
     application {
     val root=remember {reportDataRoot()}
     val gateway=remember {DesktopGateway(root)}
@@ -36,15 +34,12 @@ fun main(args:Array<String>) {
     DisposableEffect(Unit) {onDispose {repositoryResult.getOrNull()?.close()}}
     val updates=remember {DesktopUpdates(root,gateway)}
     DisposableEffect(updates) {onDispose {updates.close()}}
-    var footage by remember {mutableStateOf(false)}
     Window(onCloseRequest=::exitApplication,title="Shot Reporter",icon=BitmapPainter(gateway.icon),state=rememberWindowState(width=1280.dp,height=900.dp)) {
         androidx.compose.foundation.layout.Column {
             androidx.compose.foundation.layout.Row {
-                androidx.compose.material3.TextButton(enabled=!updates.installing,onClick={footage=false}) {androidx.compose.material3.Text("Reports")}
-                androidx.compose.material3.TextButton(enabled=!updates.installing,onClick={footage=true}) {androidx.compose.material3.Text("Desktop footage")}
                 DesktopUpdateButton(updates,state,::exitApplication)
             }
-            if(footage) key(state.report.id) {MediaWorkspace(state.report,state,root)} else FieldApp(state)
+            FieldApp(state)
         }
     }
 }
@@ -58,7 +53,7 @@ class DesktopGateway(private val root:Path):PlatformGateway {
     var failure:(Exception)->Unit={}
     private val prefs=Properties().apply {runCatching {Files.newInputStream(root.resolve("preferences.properties")).use {load(it)}}}
     override fun demo():Report=Exchange.decode(resource("demo-report.json"))
-    override fun notices():String=resource("open-source-notices.txt").toString(Charsets.UTF_8)+"\n\n"+resource("windows-codec-notices.txt").toString(Charsets.UTF_8)+"\n\n"+bundledMediaLegalNotices()
+    override fun notices():String=resource("open-source-notices.txt").toString(Charsets.UTF_8)
     override fun preference(key:String,fallback:String):String=prefs.getProperty(key,fallback)
     override fun preference(key:String,value:String,write:Boolean) {prefs.setProperty(key,value);runCatching {Files.createDirectories(root);Files.newOutputStream(root.resolve("preferences.properties")).use {prefs.store(it,"Shot Reporter local display preferences")}}}
     override fun importFile(complete:(ByteArray?)->Unit) {SwingUtilities.invokeLater {

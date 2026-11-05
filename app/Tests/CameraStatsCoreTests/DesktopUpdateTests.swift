@@ -67,36 +67,13 @@ final class DesktopUpdateTests:XCTestCase {
     @MainActor func testSaveFailureCancelRetryAndOneTimeInstall() throws {
         let root=try directory();defer {try? FileManager.default.removeItem(at:root)}
         let gate=DesktopUpdateSaveGate();defer {gate.updateAborted()};var saves=0,installs=0,fail=true
-        gate.acquire={try DesktopUpdateMediaLease(root:root)}
         gate.save={saves += 1;if fail {throw DesktopUpdateError("disk full fixture")}}
         gate.postpone {installs += 1}
         try gate.install(confirmed:false);XCTAssertEqual(saves,0);XCTAssertEqual(installs,0)
-        XCTAssertThrowsError(try gate.install(confirmed:true));XCTAssertTrue(gate.pending);XCTAssertNil(gate.lease);XCTAssertEqual(installs,0)
+        XCTAssertThrowsError(try gate.install(confirmed:true));XCTAssertTrue(gate.pending);XCTAssertEqual(installs,0)
         fail=false;try gate.install(confirmed:true);try gate.install(confirmed:true)
         XCTAssertEqual(saves,2);XCTAssertEqual(installs,1);XCTAssertTrue(gate.installing)
         let cancelled=DesktopUpdateSaveGate();cancelled.postpone {installs += 10};cancelled.cancel();try cancelled.install(confirmed:true);XCTAssertEqual(installs,1)
-    }
-    func testMediaLeaseDetectsRealOtherProcessLockAndPreservesJournals() throws {
-        let root=try directory();defer {try? FileManager.default.removeItem(at:root)}
-        let home=root.appendingPathComponent("desktop-media/report-fixture",isDirectory:true)
-        try FileManager.default.createDirectory(at:home,withIntermediateDirectories:true)
-        let journal=home.appendingPathComponent("media.sqlite3"),bytes=Data("isolated journal fixture".utf8);try bytes.write(to:journal)
-        let child=Process(),input=Pipe(),output=Pipe();child.executableURL=URL(fileURLWithPath:"/usr/bin/perl")
-        // Perl's packed struct flock matches Darwin off_t/off_t/pid/short/short.
-        child.arguments=["-e","use Fcntl qw(:DEFAULT :flock); open(my $f, '+>>', $ARGV[0]) or die $!; my $l=pack('qqiss',0,0,0,3,0); fcntl($f,8,$l) or die $!; $|=1; print qq(ready\\n); scalar(<STDIN>);",home.appendingPathComponent("worker.lock").path]
-        child.standardInput=input;child.standardOutput=output;child.standardError=Pipe();try child.run()
-        defer {try? input.fileHandleForWriting.close();if child.isRunning {child.terminate()};child.waitUntilExit()}
-        let ready=output.fileHandleForReading.availableData;XCTAssertTrue(String(decoding:ready,as:UTF8.self).contains("ready"))
-        XCTAssertThrowsError(try DesktopUpdateMediaLease(root:root))
-        try input.fileHandleForWriting.close();child.waitUntilExit();XCTAssertEqual(child.terminationStatus,0)
-        let lease=try DesktopUpdateMediaLease(root:root);lease.release()
-        XCTAssertEqual(try Data(contentsOf:journal),bytes)
-    }
-    func testSymlinkJournalCannotRedirectUpdateLease() throws {
-        let root=try directory(),outside=try directory();defer {try? FileManager.default.removeItem(at:root);try? FileManager.default.removeItem(at:outside)}
-        try FileManager.default.createSymbolicLink(at:root.appendingPathComponent("desktop-media"),withDestinationURL:outside)
-        XCTAssertThrowsError(try DesktopUpdateMediaLease(root:root))
-        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath:outside.path).isEmpty)
     }
     @MainActor func testRealSparkleDelegateWaitsForConfirmationAndSaveThenRecoversOnAbort() async throws {
         let root=try directory();defer {try? FileManager.default.removeItem(at:root)}
@@ -104,7 +81,6 @@ final class DesktopUpdateTests:XCTestCase {
         let fixture=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:nil,userDriverDelegate:nil)
         var saves=0,installs=0,confirm=false,fail=false
         updates.confirmInstall={confirm};updates.presentNotice={_,_ in}
-        updates.gate.acquire={try DesktopUpdateMediaLease(root:root)}
         updates.gate.save={saves += 1;if fail {throw DesktopUpdateError("save fixture failure")}}
         XCTAssertTrue(updates.updater(fixture.updater,shouldPostponeRelaunchForUpdate:SUAppcastItem.empty(),untilInvokingBlock:{installs += 1}))
         for _ in 0..<10 {await Task.yield()}
@@ -112,7 +88,7 @@ final class DesktopUpdateTests:XCTestCase {
         confirm=true;fail=true;updates.check();XCTAssertEqual(installs,0);XCTAssertEqual(saves,1)
         fail=false;updates.check();XCTAssertEqual(installs,1);XCTAssertEqual(saves,2);XCTAssertTrue(DesktopUpdateActivity.installing)
         updates.updater(fixture.updater,didAbortWithError:DesktopUpdateError("fixture installer failure"))
-        XCTAssertFalse(DesktopUpdateActivity.installing);XCTAssertNil(updates.gate.lease);XCTAssertFalse(updates.gate.pending)
+        XCTAssertFalse(DesktopUpdateActivity.installing);XCTAssertFalse(updates.gate.pending)
     }
     @MainActor func testSaveCheckpointPreservesCurrentAndPreviousRecoverySnapshots() throws {
         let root=try directory();defer {try? FileManager.default.removeItem(at:root)}
@@ -127,7 +103,6 @@ final class DesktopUpdateTests:XCTestCase {
         var newer=store.report;newer.values["title"]="Concurrent fixture";newer.record("fixture",device:"fixture")
         _=try repository.save(slot:store.slot,report:newer,device:"fixture",expectedFingerprint:current)
         XCTAssertThrowsError(try updates.gate.prepare())
-        updates.gate.terminationCancelled()
     }
     func testEphemeralSignatureAndIsolatedReplacementRecoveryPreserveData() throws {
         // This is an offline trust/preservation fixture, *not* an end-to-end

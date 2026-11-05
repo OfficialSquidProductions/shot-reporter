@@ -7,7 +7,11 @@ with tempfile.TemporaryDirectory(prefix='camerastats-crash-') as tmp:
     tmp=Path(tmp)
     executable=tmp/'CrashCommitProbe'
     command=['swiftc','-module-cache-path',str(tmp/'module-cache'),'-I',str(ROOT/'app/Sources/CSQLite')]
-    command += [str(p) for p in sorted((ROOT/'app/Sources/CameraStatsCore').glob('*.swift'))]
+    # This probe exercises report persistence, not application crash capture.
+    # Keep its dependency closure explicit so unrelated C-backed services do not
+    # require their runtime/module when compiling the standalone test process.
+    sources = ['Model.swift', 'NamingSettings.swift', 'Demo.swift', 'Exchange.swift', 'Reports.swift', 'Repository.swift']
+    command += [str(ROOT/'app/Sources/CameraStatsCore'/name) for name in sources]
     command += [str(ROOT/'tools/CrashCommitProbe.swift'),'-o',str(executable)]
     subprocess.run(command,check=True)
     killed=subprocess.run([str(executable),'commit-and-kill',str(tmp/'fixture')],capture_output=True)

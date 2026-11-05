@@ -19,7 +19,9 @@ class ReportException(message: String) : IllegalArgumentException(message)
     val defaults: Map<String,String> = mapOf("camera" to "A", "roll" to "A001", "load" to identity(), "playbackRate" to "24000/1001", "sensorRate" to "24000/1001"),
     val profile: String = Schema.profiles.first(), val positions: List<String> = listOf("All Duties"),
     val entries: List<Entry> = emptyList(), val history: List<Change> = emptyList(),
-    val importedPackages: List<String> = emptyList(), val namingTemplate: String = "{project}_SC{scene}_TK{take}_CAM-{camera}"
+    val importedPackages: List<String> = emptyList(),
+    // Opaque schema-1 compatibility data. Retained on import/export, never interpreted.
+    val namingTemplate: String = "{project}_SC{scene}_TK{take}_CAM-{camera}"
 ) {
     val active: List<Entry> get() = entries.filterNot { it.deleted }
     fun record(summary: String, device: String): Report {
@@ -44,6 +46,6 @@ class ReportException(message: String) : IllegalArgumentException(message)
         }
     }
     fun separateDemo(): Report = copy(id=identity(),revision=0,entries=entries.map { it.copy(id=identity(),created=timestamp()) },history=emptyList(),importedPackages=emptyList(),defaults=defaults + ("load" to identity())).let { r ->
-        r.copy(entries=r.entries.map { it.copy(values=it.values + ("load" to r.defaults.getValue("load"))) }).record("Created fictional The Last Light report from shared fixture revision 1. No footage included.","Built-in demo fixture")
+        r.copy(entries=r.entries.map { it.copy(values=it.values + ("load" to r.defaults.getValue("load"))) }).record("Created fictional The Last Light report from shared fixture revision 1.","Built-in demo fixture")
     }
 }

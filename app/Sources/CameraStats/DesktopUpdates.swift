@@ -6,7 +6,6 @@ import Security
 #if canImport(Sparkle) && !SHOT_REPORTER_STORE_DISTRIBUTION
 import Sparkle
 #endif
-import Darwin
 import CameraStatsCore
 
 /// A distribution policy, not a second downloader. Sparkle authenticates the
@@ -77,60 +76,26 @@ struct DesktopUpdatePolicy {
 }
 struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:String){self.message=message};var errorDescription:String? {message} }
 
-/// Hold the *same POSIX record locks* as Java FileChannel.tryLock. An update
-/// cannot terminate a copy/undo halfway through its commit. Locks last until
-/// the host terminates, so no new worker can start between saving and relaunch.
-final class DesktopUpdateMediaLease {
-    private var descriptors:[Int32]=[]
-    init(root:URL) throws {
-        let fm=FileManager.default, media=root.appendingPathComponent("desktop-media",isDirectory:true)
-        guard fm.fileExists(atPath:media.path) else {return}
-        let metadata=try media.resourceValues(forKeys:[.isSymbolicLinkKey,.isDirectoryKey])
-        guard metadata.isSymbolicLink != true,metadata.isDirectory == true else {throw DesktopUpdateError("The media journal directory needs recovery before updating.")}
-        do {
-            for directory in try fm.contentsOfDirectory(at:media,includingPropertiesForKeys:[.isSymbolicLinkKey,.isDirectoryKey]) {
-                let values=try directory.resourceValues(forKeys:[.isSymbolicLinkKey,.isDirectoryKey])
-                guard values.isSymbolicLink != true else {throw DesktopUpdateError("A media journal path is a symbolic link. Update postponed; journals remain unchanged.")}
-                guard values.isDirectory == true else {continue}
-                let path=directory.appendingPathComponent("worker.lock").path
-                let descriptor=open(path,O_RDWR | O_CREAT | O_NOFOLLOW,mode_t(0o600))
-                guard descriptor >= 0 else {throw DesktopUpdateError("A media journal could not be locked. Finish media work before installing.")}
-                var lock=flock(l_start:0,l_len:0,l_pid:0,l_type:Int16(F_WRLCK),l_whence:Int16(SEEK_SET))
-                if fcntl(descriptor,F_SETLK,&lock) == -1 {close(descriptor);throw DesktopUpdateError("A media worker is still running. Finish or cancel it, wait for its journal to settle, then continue installing.")}
-                descriptors.append(descriptor)
-            }
-        } catch {release();throw error}
-    }
-    func release() {for descriptor in descriptors {close(descriptor)};descriptors=[]}
-    deinit {release()}
-}
-
-/// A small testable gate also used by normal termination. No install continuation
-/// is invoked until the user confirms, the worker is idle, and SQLite saves.
+/// Installation proceeds only after confirmation and verification of the saved report.
 @MainActor enum DesktopUpdateActivity {static var installing=false}
 
 @MainActor final class DesktopUpdateSaveGate {
     var save: (() throws -> Void)?
-    var acquire: (() throws -> DesktopUpdateMediaLease)?
-    private(set) var lease:DesktopUpdateMediaLease?
     private(set) var installing=false
     private var continuation:(() -> Void)?
     func postpone(_ action:@escaping ()->Void) {guard !installing,continuation == nil else {return};continuation=action}
     var pending:Bool {continuation != nil}
-    func cancel() {guard !installing else {return};continuation=nil;lease=nil}
+    func cancel() {guard !installing else {return};continuation=nil}
     func prepare() throws {
         guard !installing else {return}
-        guard let save,let acquire else {throw DesktopUpdateError("The report workspace is not ready. Keep working and retry the update.")}
-        lease=nil
-        let next=try acquire()
-        do {try save();lease=next} catch {next.release();throw error}
+        guard let save else {throw DesktopUpdateError("The report workspace is not ready. Keep working and retry the update.")}
+        try save()
     }
     func install(confirmed:Bool) throws {
         guard confirmed,!installing,let action=continuation else {return}
         try prepare();installing=true;DesktopUpdateActivity.installing=true;continuation=nil;action()
     }
-    func terminationCancelled() {if !installing {lease=nil}}
-    func updateAborted() {installing=false;DesktopUpdateActivity.installing=false;continuation=nil;lease=nil}
+    func updateAborted() {installing=false;DesktopUpdateActivity.installing=false;continuation=nil}
 }
 
 #if canImport(Sparkle) && !SHOT_REPORTER_STORE_DISTRIBUTION
@@ -149,7 +114,6 @@ final class DesktopUpdateMediaLease {
     var isDirect:Bool {policy.distribution == .direct && policy.unavailableReason == nil}
     var channelName:String {policy.channel.rawValue.capitalized}
     func configure(store:Store) {
-        gate.acquire={try DesktopUpdateMediaLease(root:store.root)}
         gate.save={
             guard !store.blocked,!store.pendingImport,store.error == nil else {throw DesktopUpdateError("Resolve the report's recovery, import or save message before installing an update.")}
             if store.saved == nil {try store.persist(store.report)}
@@ -185,7 +149,7 @@ final class DesktopUpdateMediaLease {
         let confirmed:Bool
         if let confirmInstall {confirmed=confirmInstall()} else {
         let alert=NSAlert();alert.messageText="Save and install Shot Reporter?"
-        alert.informativeText="Your report will be saved before Shot Reporter closes and relaunches. Source footage, reports and media recovery journals stay in their existing locations. Finish or cancel active media operations first."
+        alert.informativeText="Your report will be saved before Shot Reporter closes and relaunches. Reports and recovery snapshots stay in their existing locations."
         alert.addButton(withTitle:"Save, Install and Relaunch");alert.addButton(withTitle:"Keep Working")
         confirmed=alert.runModal() == .alertFirstButtonReturn
         }
@@ -195,7 +159,7 @@ final class DesktopUpdateMediaLease {
     func prepareToTerminate()->Bool {
         guard gate.pending || gate.installing else {return true}
         if gate.pending && !gate.installing {continueInstall();return gate.installing}
-        do {try gate.prepare();return true} catch {status=error.localizedDescription;show("Keep Shot Reporter open",status);gate.terminationCancelled();return false}
+        do {try gate.prepare();return true} catch {status=error.localizedDescription;show("Keep Shot Reporter open",status);return false}
     }
     func allowedChannels(for updater:SPUUpdater)->Set<String> {policy.channel == .alpha ? ["alpha","stable"]:["stable"]}
     static func validateFeedSignature(_ status:SPUAppcastSigningValidationStatus)throws {
@@ -207,7 +171,7 @@ final class DesktopUpdateMediaLease {
     }
     func updater(_ updater:SPUUpdater,didFindValidUpdate item:SUAppcastItem) {availableVersion=item.displayVersionString;status="Shot Reporter \(item.displayVersionString) is available. Review release notes before installing."}
     func updaterDidNotFindUpdate(_ updater:SPUUpdater) {availableVersion=nil;status="You have the newest available \(channelName.lowercased()) build."}
-    func updater(_ updater:SPUUpdater,didAbortWithError error:Error) {DiagnosticsCenter.shared.capture(.updates,error:error as NSError);status="Update check or install stopped: \(error.localizedDescription). Local reports and media recovery journals remain in their existing locations.";gate.updateAborted()}
+    func updater(_ updater:SPUUpdater,didAbortWithError error:Error) {DiagnosticsCenter.shared.capture(.updates,error:error as NSError);status="Update check or install stopped: \(error.localizedDescription). Local reports and recovery snapshots remain in their existing locations.";gate.updateAborted()}
     func updater(_ updater:SPUUpdater,shouldPostponeRelaunchForUpdate item:SUAppcastItem,untilInvokingBlock installHandler:@escaping ()->Void)->Bool {
         gate.postpone(installHandler);DispatchQueue.main.async {[weak self] in self?.continueInstall()};return true
     }

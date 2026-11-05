@@ -7,33 +7,30 @@ import plistlib
 import shutil
 import subprocess
 from pathlib import Path
+from report_bundle_policy import validate_report_bundle
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--built-app', required=True, type=Path)
-parser.add_argument('--worker-source', required=True, type=Path)
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--profile', required=True, type=Path)
 args = parser.parse_args()
-output, profile = args.output.absolute(), args.profile.absolute()
+output, profile = args.output.absolute(), args.profile.resolve()
 if output.exists() or profile.exists():
     raise SystemExit('Choose fresh output and profile paths; existing files are preserved.')
 if not profile.name.startswith('ShotReporterTest-') or not args.profile.is_absolute():
     raise SystemExit('The dedicated profile must be absolute and named ShotReporterTest-*.')
 if output.suffix != '.app' or output.parent.resolve() in [Path('/Applications'), Path.home() / 'Applications']:
     raise SystemExit('Choose a local development app path outside Applications.')
-if not (args.worker_source / 'runtime/bin/java').is_file():
-    raise SystemExit('A previously validated local worker bundle is required.')
+validate_report_bundle(args.built_app)
 output.parent.mkdir(parents=True, exist_ok=True)
 profile.mkdir(parents=True)
 for folder in ['Diagnostics', 'Logs', 'Backups']:
     (profile / folder).mkdir()
 shutil.copytree(args.built_app, output, symlinks=True)
-resources = output / 'Contents/Resources'
-shutil.copytree(args.worker_source, resources / 'DesktopMedia', symlinks=True)
 info_path = output / 'Contents/Info.plist'
 info = plistlib.loads(info_path.read_bytes())
 info.update(CFBundleIdentifier='org.squidproductions.shotreporter.settings-preview',
-            CFBundleDisplayName='Shot Reporter Settings Preview', CFBundleName='Shot Reporter Settings Preview',
+            CFBundleDisplayName='Shot Reporter Reporting Preview', CFBundleName='Shot Reporter Reporting Preview',
             ShotReporterPreviewProfileRoot=str(profile), ShotReporterDistribution='development',
             SUEnableAutomaticChecks=False, SUAutomaticallyUpdate=False, SUAllowsAutomaticUpdates=False)
 # A preview must not register itself as the owner of production report files.

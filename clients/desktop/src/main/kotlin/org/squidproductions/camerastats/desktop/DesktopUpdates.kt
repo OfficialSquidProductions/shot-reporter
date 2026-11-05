@@ -14,9 +14,6 @@ import java.nio.file.*
 import java.util.concurrent.*
 import javax.swing.SwingUtilities
 
-/** Shared with the media request gate; true from install intent until failure or process exit. */
-object DesktopUpdateActivity { @Volatile var installing:Boolean=false;internal set }
-
 class DesktopUpdates(private val root:Path,private val gateway:DesktopGateway):AutoCloseable {
     var visible by mutableStateOf(false)
     var busy by mutableStateOf(false);private set
@@ -47,7 +44,7 @@ class DesktopUpdates(private val root:Path,private val gateway:DesktopGateway):A
     private fun publish(operation:Long,action:()->Unit)=SwingUtilities.invokeLater {if(!closed && operation==generation) action()}
     private fun unavailable():Boolean {
         if(!System.getProperty("os.name").startsWith("Windows")) {status="Use the native macOS Shot Reporter update menu on this platform.";return true}
-        if(policy==null) {status="Automatic installation is not configured. This build has no trusted Shot Reporter update feed, signing key or Windows publisher certificate. Existing unsigned releases require manual installation. Reports and media journals remain in their existing folder.";return true};return false
+        if(policy==null) {status="Automatic installation is not configured. This build has no trusted Shot Reporter update feed, signing key or Windows publisher certificate. Existing unsigned releases require manual installation. Reports remain in their existing folder.";return true};return false
     }
     fun check(manual:Boolean=true) {
         if(manual) visible=true
@@ -72,7 +69,7 @@ class DesktopUpdates(private val root:Path,private val gateway:DesktopGateway):A
     fun install(state:AppState,exit:()->Unit) {
         val next=release ?: return;val file=installer ?: return;if(unavailable() || busy) return
         val savedState=captureUpdateSaveState(state)
-        installing=true;DesktopUpdateActivity.installing=true;status="Verifying saved reports, idle media journals and recovery snapshots…"
+        installing=true;status="Verifying saved reports and recovery snapshots…"
         run {operation->
             try {
                 val executable=System.getProperty("jpackage.app-path")?.let(Path::of) ?: error("Run the installed Windows application before updating.")
@@ -87,15 +84,15 @@ class DesktopUpdates(private val root:Path,private val gateway:DesktopGateway):A
                         exit()
                     } catch(e:Throwable) {
                         prepared.close();synchronized(lifecycle) {if(guard===prepared) guard=null}
-                        installing=false;DesktopUpdateActivity.installing=false;status=e.message ?: "Update handoff failed; app data was preserved."
+                        installing=false;status=e.message ?: "Update handoff failed; app data was preserved."
                     }
                 }
-            } catch(e:Throwable) {publish(operation) {installing=false;DesktopUpdateActivity.installing=false};throw e}
+            } catch(e:Throwable) {publish(operation) {installing=false};throw e}
         }
     }
     override fun close() {
         synchronized(lifecycle) {if(closed) return;closed=true;generation++;guard?.close();guard=null}
-        DesktopUpdateActivity.installing=false;future?.cancel(true);pool.shutdownNow()
+        future?.cancel(true);pool.shutdownNow()
     }
 }
 @Composable fun DesktopUpdateButton(updates:DesktopUpdates,state:AppState,exit:()->Unit) {
@@ -104,7 +101,7 @@ class DesktopUpdates(private val root:Path,private val gateway:DesktopGateway):A
     if(updates.visible) AlertDialog(onDismissRequest={if(!updates.installing) updates.visible=false},title={Text(updates.release?.let {"Shot Reporter ${it.version}"} ?: "Shot Reporter updates")},text={Column(Modifier.widthIn(min=420.dp,max=680.dp).heightIn(max=520.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text(updates.status)
         TextButton(enabled=!updates.busy,onClick={updates.openRecoveryFolder()}) {Text("Logs and backups")}
-        updates.release?.let {Text("What’s new",style=MaterialTheme.typography.titleMedium);Text(it.releaseNotes.ifBlank {"Release notes unavailable."});Text("The app saves and verifies reports before installation. Footage operations must be idle. Windows Installer may request permission, then Shot Reporter relaunches. Cancel to keep working.")}
+        updates.release?.let {Text("What’s new",style=MaterialTheme.typography.titleMedium);Text(it.releaseNotes.ifBlank {"Release notes unavailable."});Text("The app saves and verifies reports before installation. Windows Installer may request permission, then Shot Reporter relaunches. Cancel to keep working.")}
         Row {Checkbox(updates.automatic,{updates.changeAutomatic(it)},enabled=!updates.busy);Text("Check automatically at launch and daily")}
         Row {listOf("stable","alpha").forEach {value->FilterChip(updates.channel==value,{updates.changeChannel(value)},label={Text(value.replaceFirstChar(Char::uppercase))},enabled=!updates.busy)}}
         if(updates.busy) LinearProgressIndicator(Modifier.fillMaxWidth())

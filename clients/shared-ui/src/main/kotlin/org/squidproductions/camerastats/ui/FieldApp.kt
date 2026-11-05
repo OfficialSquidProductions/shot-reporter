@@ -106,7 +106,7 @@ private val Green=Color(0xff237b20)
                                     OutlinedButton(onClick={documentPicker=true},enabled=state.documents.isNotEmpty()) {Text("Open report")}
                                     Button(onClick={state.demo()},enabled=!state.blocked,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text("Open The Last Light demo")}
                                     TextButton(onClick={state.open(Report())},enabled=!state.blocked) {Text("New blank report")}
-                                    Text("Demo data is fictional. No footage or camera integration is included.",style=MaterialTheme.typography.bodySmall)
+                                    Text("Demo data is fictional.",style=MaterialTheme.typography.bodySmall)
                                     state.report.values["demoScript"]?.let {v -> TextButton(onClick={script=v}) {Text("Read the demo script")} }
                                     state.report.values["demoShotPlan"]?.let {v -> TextButton(onClick={script=v}) {Text("Read the 16-shot plan")} }
                                 }
@@ -124,7 +124,7 @@ private val Green=Color(0xff237b20)
                             "Log" -> LogScreen(state,detail,{v ->detail=v;host.preference("detail",v,true)})
                             "Review" -> ReviewScreen(state)
                             "Saves" -> {
-                                Section("Report handoff · no footage included") {
+                                Section("Report handoff") {
                                     Text(state.status);state.lastExport?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
                                     Button(onClick={state.export("camreport")}) {Text("Save As .camreport")}
                                     OutlinedButton(onClick={state.importReport()}) {Text("Import Save…")}
@@ -135,12 +135,7 @@ private val Green=Color(0xff237b20)
                                     Button(onClick={state.export("pdf")}) {Text("Save landscape Camera Report PDF")}
                                     OutlinedButton(onClick={state.export("csv")}) {Text("Export CSV")}
                                     OutlinedButton(onClick={state.export("html")}) {Text("Export HTML report")}
-                                    Text("PDF is a frozen draft/ready report. CSV and HTML are generic exports; no NLE adapter is certified.",style=MaterialTheme.typography.bodySmall)
-                                }
-                                Section("Naming preset · preview only") {
-                                    Editor("Template",state.report.namingTemplate) {v ->state.change("Edited naming preview") {it.copy(namingTemplate=v)}}
-                                    state.report.active.firstOrNull()?.let {entry -> Text(runCatching {Naming.preview(state.report.namingTemplate,state.report,entry)}.getOrElse {it.message.orEmpty()})}
-                                    Text("This preview never renames footage.",style=MaterialTheme.typography.bodySmall)
+                                    Text("PDF is a frozen draft/ready report. CSV and HTML are generic report exports.",style=MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -155,7 +150,7 @@ private val Green=Color(0xff237b20)
             val preview=runCatching {Exchange.preview(state.report,incoming)}
             AlertDialog(onDismissRequest={state.pending=null},title={Text("Import preview")},text={Column(Modifier.heightIn(max=500.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 Text(incoming.report.values["title"] ?: "Untitled",fontWeight=FontWeight.Bold);Text("Revision ${incoming.report.revision} · ${incoming.report.active.size} takes · ${incoming.manifest.device}")
-                Text("Verified schema, CRCs, SHA-256 and report identity. No footage included.")
+                Text("Verified schema, CRCs, SHA-256 and report identity.")
                 preview.onSuccess {p ->Text("${p.additions.size} additions · ${p.conflicts.size} conflicts${if(p.duplicate) " · Already imported" else ""}");p.conflicts.forEach {Text(it)}}.onFailure {Text(it.message.orEmpty())}
                 TextButton(onClick={state.change("Merged independent additions") {Exchange.merge(it,incoming,host.label)};state.pending=null},enabled=preview.isSuccess && preview.getOrNull()?.conflicts?.isEmpty()==true && preview.getOrNull()?.duplicate==false) {Text("Merge independent additions")}
                 Button(onClick={state.open(incoming.report);state.pending=null}) {Text("Open as separate editable report")}

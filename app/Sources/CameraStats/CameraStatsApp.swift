@@ -34,87 +34,6 @@ struct ExportFile: FileDocument {
         #endif
     }
 }
-@MainActor struct NamingSettingsView: View {
-    @Bindable var store: Store
-    @Environment(\.dismiss) private var dismiss
-    #if os(macOS)
-    @State private var media: DesktopMediaModel
-    #endif
-    init(store: Store) {
-        self.store = store
-        #if os(macOS)
-        _media = State(initialValue: DesktopMediaModel(root: store.root, reportID: store.report.id))
-        #endif
-    }
-    private var settings: NamingSettings { store.report.naming }
-    private var takePreview: String {
-        guard let entry = store.report.active.first else {return "Add a take to preview its name."}
-        return (try? Naming.preview(template: settings.reportTemplate, report: store.report, entry: entry)) ?? "Add missing values or correct the template to preview a take name."
-    }
-    private var reportPreview: String {(try? store.report.exportName(extension: "camreport")) ?? "Report name needs values for its enabled components."}
-    private func change(_ action: (inout NamingSettings) -> Void) { store.change("Updated naming settings; metadata retained") { $0.updateNaming(action) } }
-    private func templateBinding(copy: Bool) -> Binding<String> {
-        Binding(get: {copy ? settings.selection.copyTemplate : settings.selection.reportTemplate}, set: { value in
-            change { settings in var selection = settings.selection; if copy {selection.copyTemplate = value} else {selection.reportTemplate = value}; settings.selection = selection }
-        })
-    }
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {Label("Settings", systemImage: "gearshape").font(.title2.bold()); Spacer(); Button("Done") {dismiss()}.keyboardShortcut(.cancelAction)}.padding(20)
-            Divider()
-            Form {
-                Section("Naming preset") {
-                    Picker("Preset", selection: Binding(get: {settings.selectionID}, set: {value in change {$0.select(value)}})) {
-                        ForEach(NamingSettings.Preset.allCases) {Text($0.rawValue).tag($0.rawValue)}
-                        ForEach(settings.savedSelectionIDs, id: \.self) {id in Text(settings.selections[id]?.name ?? "Saved preset").tag(id)}
-                    }
-                    Text("Changes save automatically with this report. Each preset remembers its templates and component choices. Hidden metadata is kept.").font(.caption).foregroundStyle(.secondary)
-                    if settings.preset == .movie {Text("Movie names omit season and episode. Switch to TV / Episodic to use them.").font(.caption)}
-                }
-                Section("Include in generated names") {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 200))], alignment: .leading, spacing: 12) {
-                        ForEach(settings.visibleComponents, id: \.self) {component in
-                            Toggle(component.capitalized, isOn: Binding(get: {settings.enabled(component) && settings.includes(component)}, set: {value in change {$0.setEnabled(component, value)}}))
-                        }
-                    }
-                    Text("Original and asset apply to footage copies. Missing enabled values block footage naming; turn off components you do not need.").font(.caption).foregroundStyle(.secondary)
-                }
-                if settings.preset != .movie {
-                    Section("Episode metadata") {
-                        ForEach(Schema.project.filter {["season", "episode"].contains($0.id)}) {field in
-                            TextField(field.title, text: Binding(get: {store.report.values[field.id, default: ""]}, set: {value in store.change {$0.values[field.id] = value}})).textFieldStyle(.roundedBorder)
-                        }
-                    }
-                }
-                Section("Name preview") {
-                    Text("Take: " + takePreview).font(.caption.monospaced()).textSelection(.enabled).accessibilityLabel("Take name preview: " + takePreview)
-                    Text("Report: " + reportPreview).font(.caption.monospaced()).textSelection(.enabled).accessibilityLabel("Report name preview: " + reportPreview)
-                    if store.report.reportNameNeedsValues {Text("Complete the enabled report naming values to use this preset. Draft exports use the safe Shot-Reporter name shown above.").font(.caption).foregroundStyle(.secondary)}
-                    Text("Footage copy template: " + settings.copyTemplate).font(.caption.monospaced()).textSelection(.enabled)
-                }
-                Section { DisclosureGroup("Advanced templates") {
-                    TextField("Preset name", text: Binding(get: {settings.selection.name}, set: {value in change {var selection = $0.selection; selection.name = value; $0.selection = selection}})).textFieldStyle(.roundedBorder)
-                    TextField("Take name template", text: templateBinding(copy: false), axis: .vertical).textFieldStyle(.roundedBorder)
-                    TextField("Footage copy template", text: templateBinding(copy: true), axis: .vertical).textFieldStyle(.roundedBorder)
-                    Text("Tokens: project, season, episode, scene, take, camera, roll. Footage also supports original and asset. Use :02 or :03 for numeric padding. Components separated by underscores are omitted when disabled. Source templates stay saved; generated names use the selected components.").font(.caption).foregroundStyle(.secondary)
-                    #if os(macOS)
-                    Menu("Saved footage presets") {
-                        ForEach(media.snapshot.presets) {saved in
-                            Button("\(saved.name) v\(saved.version)") {change {$0.loadSaved(id:saved.id+":v\(saved.version)",name:saved.name,template:saved.template)}}
-                        }
-                    }.disabled(media.snapshot.presets.isEmpty)
-                    #endif
-                } }
-                Section {Label(store.blocked ? "Recovery required" : store.error != nil ? "Change could not be saved" : "Saved automatically on this device", systemImage: store.blocked || store.error != nil ? "exclamationmark.triangle" : "checkmark.circle").font(.caption)}
-            }.formStyle(.grouped).scrollContentBackground(.hidden)
-        }.background(Color("Canvas"))
-        .frame(minWidth: 320, idealWidth: 620, minHeight: 480, idealHeight: 740)
-        #if os(macOS)
-        .task {media.refresh()}
-        #endif
-    }
-}
-
 struct Brand: View {
     var body: some View {
         HStack(spacing:12) {
@@ -125,9 +44,6 @@ struct Brand: View {
 }
 enum Destination: String, CaseIterable, Identifiable {
     case today = "Today", log = "Log", review = "Review", saves = "Saves"
-    #if os(macOS)
-    case footage = "Footage"
-    #endif
     var id:String { rawValue }
     var icon:String {
         switch self {
@@ -135,9 +51,6 @@ enum Destination: String, CaseIterable, Identifiable {
         case .log:return "list.bullet.rectangle"
         case .review:return "checklist"
         case .saves:return "externaldrive"
-        #if os(macOS)
-        case .footage:return "film.stack"
-        #endif
         }
     }
 }
@@ -158,7 +71,6 @@ struct Workspace: View {
     @AppStorage("detail") private var detail = "Standard"
     @State private var scene = ""
     @State private var pdfPreview: PDFReview?
-    @State private var showingSettings=false
     @State private var showingSupport=false
     private var diagnostics:DiagnosticsCenter {DiagnosticsCenter.shared}
     var scheme:ColorScheme? { theme == "Dark" ? .dark : theme == "Light" ? .light : nil }
@@ -168,7 +80,6 @@ struct Workspace: View {
             NavigationSplitView {
                 Brand().padding(.horizontal)
                 List(Destination.allCases,selection:$destination) { d in Label(d.rawValue,systemImage:d.icon).tag(d) }
-                Button {showingSettings=true} label: {Label("Settings",systemImage:"gearshape").frame(maxWidth:.infinity,alignment:.leading)}.buttonStyle(.plain).padding(.horizontal,16).padding(.vertical,8).keyboardShortcut(",",modifiers:.command)
                 VStack(alignment:.leading) { Text("LOCAL DESKTOP ALPHA 0.2").font(.caption.bold()); Text("\(store.report.values["title",default:"Untitled"]) · r\(store.report.revision)").font(.caption); status }.padding()
             } detail: { content(destination ?? .today) }
             #else
@@ -185,7 +96,6 @@ struct Workspace: View {
             do { if let url = try result.get().first { readImport(url) } } catch { store.error = error.localizedDescription }
         }
         .fileExporter(isPresented:$exporting,document:exportFile,contentType:exportType,defaultFilename:exportName) { result in switch result { case .failure(let e): store.error = e.localizedDescription; case .success: AppProfile.preferences.set(store.report.revision,forKey:"exported-"+store.slot) } }
-        .sheet(isPresented:$showingSettings) {NamingSettingsView(store:store)}
         .sheet(isPresented:$showingSupport) {BugReportView(diagnostics:diagnostics)}
         .sheet(item:$pending) { item in importSheet(item) }
         .onChange(of:pending != nil) {_,value in store.pendingImport=value}
@@ -212,9 +122,6 @@ struct Workspace: View {
             case .log: log
             case .review: review
             case .saves: saves
-            #if os(macOS)
-            case .footage: DesktopMediaWorkspace(store:store).id(store.report.id)
-            #endif
             }
         }.navigationTitle(d.rawValue).background(Color("Canvas"))
         #if !os(macOS)
@@ -237,7 +144,7 @@ struct Workspace: View {
                 Picker("Open report",selection:Binding(get:{store.slot},set:{store.select($0)})) { Text("Current report").tag(store.slot); ForEach(store.documents.filter{$0.0 != store.slot},id:\.0) { doc in Text(doc.1).tag(doc.0) } }
                 Button { store.open(.demo()); selected = nil } label: { Label("Open The Last Light demo",systemImage:"play.rectangle").frame(maxWidth:.infinity,minHeight:32) }.buttonStyle(.borderedProminent)
                 Button("New blank report") { store.open(Report()); selected = nil }
-                Text("Demo data is fictional. No camera footage or camera integration is included.").font(.caption).foregroundStyle(.secondary)
+                Text("Demo data is fictional and illustrates shot and script reporting.").font(.caption).foregroundStyle(.secondary)
                 if let script = store.report.values["demoScript"] { NavigationLink("Read the demo script") { ScrollView { Text(script).font(.system(.body,design:.monospaced)).textSelection(.enabled).frame(maxWidth:800,alignment:.leading).padding() }.navigationTitle("The Last Light · Demo") } }
             }
             if let plan = store.report.values["demoShotPlan"] { Section("Shared demo shots") { NavigationLink("Read the 16-shot plan") { ScrollView { Text(plan).textSelection(.enabled).frame(maxWidth:800,alignment:.leading).padding() }.navigationTitle("The Last Light · Shots") } } }
@@ -248,7 +155,7 @@ struct Workspace: View {
                 Text("Positions describe responsibilities. This alpha shows all report groups; every requirement remains in Review.").font(.caption)
                 Picker("Appearance",selection:$theme) { ForEach(["System","Light","Dark"],id:\.self) { Text($0) } }
             }
-            Section("Project / crew · complete report") { ForEach(Schema.project.filter {store.report.naming.preset != .movie || !["season","episode"].contains($0.id)}) { f in field(f,projectBinding(f.id)) } }
+            Section("Project / crew · complete report") { ForEach(Schema.project) { f in field(f,projectBinding(f.id)) } }
             Section("Defaults · snapshot when a new take is created") { ForEach(Schema.settings) { f in field(f,defaultBinding(f.id)) }; Text("Editing defaults affects future takes. Existing takes keep their recorded settings.").font(.caption) }
         }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
     }
@@ -302,7 +209,7 @@ struct Workspace: View {
     }
     var saves: some View {
         Form {
-            Section("Report handoff · no footage included") {
+            Section("Report handoff") {
                 status; Text("Device: \(store.device) · report revision \(store.report.revision) · last file export \(store.lastExportedRevision.map{ "r\($0)" } ?? "none")").font(.caption)
                 Button("Save As .camreport") { export(.camreport,"camreport") {try Exchange.export(store.report,device:store.device)} }
                 Button("Import Save…") { importing = true }
@@ -315,7 +222,6 @@ struct Workspace: View {
                 Button("Export HTML report") { export(.html,"html") {Data(Reports.html(store.report).utf8)} }
                 Text("PDF is a frozen report with continuation pages and a draft/ready label. CSV and HTML are generic exports; no NLE adapter has been certified.").font(.caption)
             }
-            Section("Naming") { Button("Naming settings…") {showingSettings=true}; Text("Choose presets and filename components in Settings.").font(.caption).foregroundStyle(.secondary) }
             Section("History") { ForEach(Array(store.report.history.suffix(30).reversed().enumerated()),id:\.offset) { _,h in VStack(alignment:.leading) { Text(h.summary).font(.caption); Text("\(h.device) · \(h.date.formatted())").font(.caption2).foregroundStyle(.secondary) } } }
             Section("About") {
                 Brand()
@@ -333,7 +239,7 @@ struct Workspace: View {
         let p = item.package; let preview = try? Exchange.preview(local:store.report,incoming:p)
         return NavigationStack {
             List {
-                Section("Incoming report") { Text(p.report.values["title",default:"Untitled"]); Text("Revision \(p.manifest.revision) · \(p.report.active.count) takes · \(p.manifest.device)"); Text("Verified schema, CRCs, SHA-256 and report identity. No footage is included.").font(.caption) }
+                Section("Incoming report") { Text(p.report.values["title",default:"Untitled"]); Text("Revision \(p.manifest.revision) · \(p.report.active.count) takes · \(p.manifest.device)"); Text("Verified schema, CRCs, SHA-256 and report identity.").font(.caption) }
                 if let preview { Section("Merge preview") { Text(preview.duplicate ? "Already imported — no changes" : "\(preview.additions.count) additions · \(preview.conflicts.count) conflicts"); ForEach(preview.conflicts,id:\.self) { Text($0) }; Button("Merge independent additions") { do { let merged = try Exchange.mergeAdditions(local:store.report,incoming:p,device:store.device); try store.persist(merged); pending = nil } catch { store.error = error.localizedDescription } }.disabled(!preview.conflicts.isEmpty || preview.duplicate) } }
                 else { Text("Different report identity. Merge is unavailable.") }
                 Button("Open as separate editable report") { store.open(p.report); selected = nil; pending = nil }

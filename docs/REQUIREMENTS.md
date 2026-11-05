@@ -1,29 +1,20 @@
-# Revision 6 implementation and acceptance tracker
+# Reporting implementation and acceptance tracker
 
-Source: full 29-page Camera Reporting Product Plan supplied in Library, Revision 6, October 19, 2026. Its references describe proposed behavior, not proof of implementation. Stages and acceptance must remain explicit.
+Current scope: shot information and script-supervisor reporting. The November 5, 2026 product decision supersedes the older Revision 6 plan's asset-processing features.
 
-| Plan area | Current implementation | Outstanding acceptance / work |
+| Area | Current implementation | Remaining acceptance / work |
 | --- | --- | --- |
-| Local-only runtime | Apple and new Android/Windows clients have no application network service, account, telemetry or automatic cloud sync | Verify long offline day on physical devices |
-| Platforms | SwiftUI iPhone/iPad/Mac plus Kotlin/Compose Android phone/tablet and Windows x64 field clients; native storage/PDF/file adapters, platform CI tests | Physical devices, lower Android API baseline, Windows 10/11 consumer installations and arm64; full Stage 1 acceptance remains open |
-| Student complete report | All fields mapped in section 3, unlimited entries, missing-field list, self-review, draft PDF | Compare against original school form; test entire phone completion, conditional N/A/Unknown rules, exact landscape visual layout |
-| Profiles / detail / positions | Four named profiles; independent detail setting and multiple positions; all fields preserved | Editable custom field schemas/requirements, responsibility filtering/reordering, requirement-change preview/versioning |
-| Fast take logging | Per-camera next take, manual string slates, camera defaults, unique load IDs, flags | New-setup inheritance review, real lens/filter packages, typed measurements and rational-rate validation |
-| Local durability | SQLite WAL/FULL transactional snapshots, previous snapshot and active selection in the same transaction; stale-save protection; visible errors and saved status | Record-level search index and richer operation journal; 12-hour kill/reopen, low-storage and power-loss evidence |
-| Portable saves | Stored ZIP, manifest, stable IDs, revision/device, CRC+SHA256, preview, repeat idempotence, no footage; Swift/JVM reader interoperability fixtures | Scoped handoffs, attachments, profile/preset version records, encryption and physical cross-device handoff validation |
-| Conflict handling | Conservative merge of independent additions; conflicting versions remain separately openable | Common-base field merge, explicit conflict decisions and provenance, ownership transfer conventions |
-| Production edge cases | String slates, midnight-independent shooting-date string, independent camera labels, load ID, deleted-take tombstones | Fully separate performance/recording/logicalclip/file/range/link entities; spans and multiple takes per clip |
-| Defaults/history | Per-entry snapshots and change history; changing view/profile does not delete data | Full before/after field provenance, export history and revision recovery UI |
-| Report outputs | Landscape multipage PDF preview/export with continued long notes/flags; generic CSV and HTML | Exact supplied form parity; HTML contact sheets/thumbnails, editorial bundles, report/template version freeze records |
-| Notes/continuity | Separate camera, DP, continuity and editor text, circling | Independently attributed selects, attachments, wardrobe/prop tags, daily editorial notes, correction packages |
-| Naming | TV/Movie/custom declarative string-token preview; missing-value and portable filename checks | Token builder, padding/case/optional policy, versioned presets and import collision decisions, batch collision checks |
-| Desktop media | Explicitly unavailable in alpha | Read-only registration, worker queues, original identity, spans, verification evidence, explainable reversible matching |
-| Slate search/OCR | Explicitly unavailable in alpha | Exact-frame source mapping, JKL/step/skim, crop/rotate, local models, board detection then OCR, field confidence and human approval |
-| RED/BRAW physical rename | No filesystem mutation feature; unavailable | SDK terms/access, real fixtures, group-aware plans, copy/hash/journal/recovery/undo, both desktop OSes and NLE conform certification |
-| NLE adapters | CSV clearly generic | Named Resolve/Avid/Premiere/FCP versions, real import and proxy-to-original relink/conform fixtures |
-| Scale | Core round-trip test with 1,000-entry day | End-to-end device entry/search latency, progressive indexing, 20,000-clip test on named devices |
-| Branding | Original green SP retained, exact suite credit, theme preference and palette assets | Final UI QA in both themes at all sizes; licensed suite display font choice; small-size icon validation |
-| Demo | Explicit separate fictional The Last Light report, three takes for 3A, shared 16-shot plan, and full supplied sample script | Temporary testing feature; remove only when owner asks |
-| Releases | MIT public source under verified Squid Productions organization, signed/notarized Mac download, owner-only iPhone/iPad/Mac TestFlight, live HTTPS domain; Android/Windows release gates recorded in validation | Keep download links tied to verified artifacts; Windows remains unsigned; physical device/field acceptance and full product release remain open |
+| Platforms | SwiftUI iPhone/iPad/Mac and Kotlin/Compose Android/Windows | Physical devices, lower Android APIs, Windows 10/11 and arm64 |
+| Complete report | Project/crew, camera/media metadata, recording, lens, measurement and take fields | Original school-form parity and conditional requirement rules |
+| Fast logging | Per-camera next take, string slates, defaults, unique load IDs and flags | Typed measurement/rate validation and real field-day testing |
+| Script supervision | Circle takes and separate continuity/editorial/camera/DP notes | Attributed corrections, richer continuity tags and attachments |
+| Preferences | Profiles, detail level, positions and appearance | Custom field schemas and richer requirement policies |
+| Durability | SQLite WAL/FULL snapshots, prior snapshot, active selection, stale-save protection | Physical power-loss, low-storage and 12-hour offline tests |
+| Handoffs | Schema-1 packages, CRC/SHA-256, additions/conflict preview, cross-reader fixtures | Full three-way conflict resolution, scoped/encrypted handoffs |
+| Outputs | Landscape multipage PDF, CSV and HTML with long-note continuation | Exact supplied form parity and output template versioning |
+| History | Per-entry snapshots, change history and recoverable deleted takes | Richer before/after provenance and recovery UI |
+| Scale | 1,000-entry round-trip fixtures | End-to-end entry/search latency on physical devices |
+| Branding/demo | Original SP mark and independent shared The Last Light sample | Final visual checks across supported platforms |
+| Distribution | Existing alpha channels and signed-update verification | Exact new build acceptance, signed native upgrade/relaunch and authorized publication |
 
-The plan estimates 9–12 months with 4–6 contributors for the complete product. The current owner-test field alpha is a useful milestone, not completion of its RAW or production release gates. No claim of complete Stage 1 acceptance is made while required profile/merge/backup/platform work remains.
+Past release validation is recorded in [VALIDATION.md](VALIDATION.md). It is not evidence that a new build or every physical platform has passed.

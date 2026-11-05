@@ -1,6 +1,4 @@
 import XCTest
-import SwiftUI
-import AppKit
 @testable import CameraStatsCore
 @testable import CameraStats
 
@@ -94,66 +92,5 @@ final class NamingSettingsTests: XCTestCase {
         let package = try Exchange.read(Exchange.export(incoming, device: "other"))
         XCTAssertFalse(try Exchange.preview(local: expected, incoming: package).conflicts.isEmpty)
         XCTAssertThrowsError(try Exchange.mergeAdditions(local: expected, incoming: package, device: "test"))
-    }
-    @MainActor func testEffectivePresetsProduceExactWorkerCopyNames() async throws {
-        guard ProcessInfo.processInfo.environment["SHOT_REPORTER_WORKER_HOME"] != nil else {throw XCTSkip("A local media worker is required for physical copy acceptance")}
-        let helper = DesktopMediaTests(), (worker, fixture) = try helper.tools()
-        for preset in NamingSettings.Preset.allCases {
-            let root = FileManager.default.temporaryDirectory.appendingPathComponent("ShotReporterTest-NamingCopy-" + UUID().uuidString)
-            defer {try? FileManager.default.removeItem(at: root)}
-            let source = root.appendingPathComponent("source"), destination = root.appendingPathComponent("copies")
-            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-            let input = source.appendingPathComponent("A001_C001.mp4"); try FileManager.default.copyItem(at: fixture, to: input)
-            let original = try Data(contentsOf: input)
-            let store = Store(root: root, preferences: UserDefaults(suiteName: "ShotReporterTest-NamingCopy-" + UUID().uuidString)!)
-            store.open(.demo())
-            store.change {report in
-                report.values["season"] = "2"; report.values["episode"] = "7"
-                report.updateNaming {settings in
-                    settings.preset = preset
-                    if preset == .custom {var value = settings.selection; value.copyTemplate = "{project}_S{season:02}E{episode:02}_{original}_{asset}"; settings.selection = value}
-                    settings.setEnabled("camera", false)
-                }
-            }
-            let report = store.report, before = try Exchange.encoder().encode(report)
-            let model = DesktopMediaModel(root: root, reportID: report.id, worker: worker)
-            model.register(source, camera: "A", roll: "A001", load: "naming-fixture"); try await helper.wait(model)
-            let clip = try XCTUnwrap(model.snapshot.clips.first); model.selected = clip.id
-            model.decode(7); try await helper.wait(model)
-            model.approve(scene: "3A", take: "2"); try await helper.wait(model)
-            model.link(try XCTUnwrap(report.active.first?.id), report: report); try await helper.wait(model)
-            model.preflight([clip.id], report: report, preset: store.namingCopyPreset, destination: destination); try await helper.wait(model)
-            let job = try XCTUnwrap(model.snapshot.jobs.first), item = try XCTUnwrap(job.items.first)
-            let expected = try Naming.preview(template: report.naming.copyTemplate, report: report, entry: Entry(values: item.resolved)) + ".mp4"
-            XCTAssertEqual(item.targetName, expected)
-            XCTAssertFalse(expected.contains("CAM-"))
-            XCTAssertEqual(expected.contains("S02E07"), preset != .movie)
-            model.execute(job.id); try await helper.wait(model)
-            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: job.destination).appendingPathComponent(item.targetName)), original)
-            XCTAssertEqual(try Data(contentsOf: input), original)
-            XCTAssertEqual(try Exchange.encoder().encode(Store(root: root, preferences: UserDefaults(suiteName: "ShotReporterTest-NamingCopy-Reopen-" + UUID().uuidString)!).report), before)
-            model.execute(job.id, undo: true); try await helper.wait(model)
-        }
-    }
-    @MainActor func testSettingsRendersMovieAndTV() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ShotReporterTest-SettingsRender-" + UUID().uuidString)
-        defer {try? FileManager.default.removeItem(at: root)}
-        let store = Store(root: root, preferences: UserDefaults(suiteName: "ShotReporterTest-SettingsRender-" + UUID().uuidString)!)
-        store.open(.fixture()); _ = NSApplication.shared
-        for preset in [NamingSettings.Preset.movie, .television] {
-            store.change {report in report.updateNaming {$0.preset = preset}}
-            let host = NSHostingView(rootView: NamingSettingsView(store: store))
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 740), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
-            window.isReleasedWhenClosed = false; window.contentView = host
-            host.frame = NSRect(x: 0, y: 0, width: 620, height: 740); host.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(300))
-            XCTAssertGreaterThan(host.fittingSize.height, 300)
-            if let folder = ProcessInfo.processInfo.environment["SHOT_REPORTER_SCREENSHOTS"], let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
-                host.cacheDisplay(in: host.bounds, to: rep)
-                try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: folder).appendingPathComponent(preset == .movie ? "settings-movie.png" : "settings-tv.png"))
-            }
-            window.close()
-        }
     }
 }

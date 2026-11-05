@@ -176,7 +176,7 @@ Planned · 0 takes
             r.entries[i].reviewed = true
             if take == 2 { r.entries[i].flags.insert("Circle") }
         }
-        r.record("Created fictional The Last Light report from shared fixture revision 1. No footage is included.",device:"Built-in demo fixture")
+        r.record("Created fictional The Last Light report from shared fixture revision 1.",device:"Built-in demo fixture")
         return r
     }
 }

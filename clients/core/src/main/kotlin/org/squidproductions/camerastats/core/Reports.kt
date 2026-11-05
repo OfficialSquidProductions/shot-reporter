@@ -1,7 +1,5 @@
 package org.squidproductions.camerastats.core
 
-import java.text.Normalizer
-
 object Reports {
     fun csv(report:Report):String {
         val keys=(Schema.take+Schema.settings).map { it.id }+listOf("flags","reviewed","entryID")
@@ -25,19 +23,5 @@ object Reports {
             add("Flags: ${entry.flags.sorted().joinToString(", ").ifBlank { "None" }} · ${if(entry.reviewed) "Reviewed" else "Review pending"}")
             (Schema.take+Schema.settings).forEach { add("${it.title}: ${entry.values[it.id] ?: "—"}") }
         }
-    }
-}
-object Naming {
-    const val movie="{project}_SC{scene}_TK{take}_CAM-{camera}"
-    const val tv="{project}_S{season}E{episode}_SC{scene}_TK{take}_CAM-{camera}"
-    fun preview(template:String,report:Report,entry:Entry):String {
-        val values=report.values+entry.values+mapOf("project" to report.values["title"].orEmpty())
-        val substituted=Regex("\\{([^}]*)}").replace(template) { match ->
-            val token=match.groupValues[1];val value=values[token].orEmpty();require(value.isNotEmpty()) { "Missing naming token: $token" };require('{' !in value && '}' !in value) { "Invalid token value." };value
-        }
-        val stem=Normalizer.normalize(substituted,Normalizer.Form.NFC)
-        val reserved=setOf("CON","PRN","AUX","NUL")+(1..9).flatMap { listOf("COM$it","LPT$it") }
-        require(stem.isNotEmpty() && stem.toByteArray(Charsets.UTF_8).size<=180 && stem.none { it in "<>:\"/\\|?*{}" || it.code<32 } && !stem.endsWith('.') && !stem.endsWith(' ') && stem.substringBefore('.').uppercase() !in reserved) { "Name fails portable filename rules." }
-        return stem
     }
 }

@@ -19,4 +19,4 @@ Run `:desktop:createDistributable :desktop:packageExe :desktop:packageMsi` on Wi
 
 The UI supports offline project/crew and per-take fields, inherited camera defaults, flags, review, separate demo reports, `.camreport` import/export with conflict preview, native PDF and generic CSV/HTML. The desktop does not run a web server; Android declares no network permission. Local SQLite is WAL/FULL, with prior snapshots and stale-writer protection. Deliberately export an independent backup.
 
-See [architecture and acceptance gates](../docs/CLIENT_ARCHITECTURE.md). The full Revision 6 product is not complete; these clients do not implement camera control, footage ingestion, OCR or physical RAW renaming.
+See [architecture and acceptance gates](../docs/CLIENT_ARCHITECTURE.md). These clients focus on shot and scripty reporting.

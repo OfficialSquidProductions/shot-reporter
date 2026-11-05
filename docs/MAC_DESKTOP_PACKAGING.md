@@ -1,69 +1,30 @@
-# Mac desktop packaging
+# Mac reporting app packaging
 
-The desktop `0.2.0-alpha.3` bootstrap candidate uses Apple version `0.2.0`, numeric build `5`, stable application ID `org.squidproductions.camerastats`, and existing Apple team `FZ298DXLS3`. This profile supports **Apple Silicon, macOS 14 or later**. The retained reporting-only release provides the previous Intel/universal download; do not label this worker bundle universal.
+The native reporting app retains application ID `org.squidproductions.camerastats` and the existing report storage. The direct candidate packager targets Apple Silicon and macOS 14+. Universal or store builds require their own exact-architecture validation.
 
 ## Prepare without signing or account access
 
-`tools/prepare_macos_desktop_release.py` operates offline against supplied local inputs. It creates a fresh candidate outside the source checkout, runs the JVM worker build, and either builds the native Release app or consumes a supplied unsigned Release app. It never installs, signs, notarizes, uploads, writes feeds, reads Keychain values, or creates credentials.
-
-Required inputs are the reviewed Temurin 21.0.12.1+1 Mac aarch64 JDK, Gradle, and these complete corresponding-source archives:
-
-- `ffmpeg-9.0.2.tar.xz`, SHA-256 `8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e`.
-- `OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz`, SHA-256 `573057d03584ae793fb7ec9a14c76d826d9187a53efeefd99da47403a5308234`.
-
-The FFmpeg archive is extracted into a fresh temporary build and compiled with an explicit local Xcode compiler/SDK and macOS-14 target flags. Network protocols, automatic dependency detection, GPL and nonfree components are disabled. The profile includes ordinary review decoders and PPM/TIFF conversion needed for separately supplied RAW tools. No vendor RAW SDK is linked into FFmpeg.
-
-This rebuild matters: the earlier development-only FFmpeg binary had a macOS-26 minimum and must not enter this release. The packager checks every bundled Mach-O for arm64 support, a minimum OS no newer than 14, and absent absolute dependencies outside macOS system libraries. Universal-object headers are distinguished from actual library references.
+`tools/prepare_macos_desktop_release.py` builds the native Release app or accepts a matching unsigned `--app-input`. It requires no Java runtime or external decoder tools. Output must be a fresh directory outside the checkout.
 
 ```sh
 python3 tools/build_apple.py --distribution direct
 python3 tools/prepare_macos_desktop_release.py \
-  --java-home /local/temurin-21/Contents/Home \
-  --ffmpeg-archive /local/ffmpeg-9.0.2.tar.xz \
-  --jdk-source-archive /local/OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz \
-  --gradle /local/gradle-8.13/bin/gradle \
-  --output /private/new-release-candidate
+  --version 0.2.0-alpha.6 --build 9 \
+  --output /private/new-reporting-candidate
 ```
 
-The default requires a clean source checkout. `--allow-dirty` creates a review-only candidate whose metadata forbids public release until a clean rebuild. `--app-input` can consume a matching unsigned Release app; its version and bundle ID are checked. A final public candidate must come from the exact tested clean commit.
+Version/build must match the generated app. Choose a new monotonic release build before publication rather than reusing an existing published identity. By default source must be clean. `--allow-dirty` creates a review-only candidate whose manifest forbids release until a clean rebuild. Preparation never installs, signs, notarizes, uploads, changes feeds, reads Keychain secrets, or creates credentials.
 
-Supplying `--public-update-key` stamps the public Ed25519 key and fixed reviewed appcast location. Omitting it removes both feed and key, disabling direct updates. Never pass a private key. Publication permission does not remove the real signed upgrade/relaunch acceptance gate: leave the feed unpublished and ship a manual download if that gate has not passed.
+The candidate contains the native application and Sparkle updater. Original licenses are staged in `Contents/Resources/legal`; provenance is in `Contents/Resources/DISTRIBUTION.json`. Every bundled Mach-O must include arm64, target macOS 14 or earlier, and have no unbundled absolute non-system library dependencies. Bundle symlinks must remain internal.
 
-## Bundled code and licenses
+`--public-update-key` accepts the already authorized public Ed25519 key and stamps the fixed reviewed feed URL. Omitting it removes feed/key activation. Never supply a private key. A feed must remain unpublished until real signed upgrade/relaunch acceptance passes.
 
-`Contents/Resources/DesktopMedia` contains the worker JARs, a jlink runtime, separate FFmpeg/ffprobe executables, and the arm64 SQLite JNI library at `native/libsqlitejdbc.dylib`. The Java launch must explicitly select this native directory. Embedded Mac native copies are omitted from the SQLite JAR while its classes, notices and license resources remain; the separate JNI library is signed with the application. This avoids relying on an extracted ad-hoc Mac library in a temporary directory.
+## Signing and distribution gates
 
-The runtime's original `legal/` tree and original JAR notices remain. The worker's `legal/` directory includes Shot Reporter MIT, dependency notices, Sparkle's license, FFmpeg LGPL-2.1, source-delivery information and the SQLite layout notice. Source assets and the FFmpeg build recipe are staged beside the app in `source-assets/`.
+Preparation writes `MAC_SIGNING_PLAN.json` and explicit entitlement profiles. A separately authorized operation using `tools/sign_macos_candidate.py` signs code and nested bundles from inside out with the existing approved identity, hardened runtime, and timestamps. It never uses deep signing. The sandboxed host retains selected-file access and Sparkle IPC exceptions. Downloader XPC uses its supported sandbox/network-client profile; Installer remains able to replace and relaunch the app. No blanket library-validation exception is added.
 
-**Publish all corresponding-source assets with the binary in the same GitHub release.** Preserve their checksums and actual download availability. Upstream links alone do not replace this release's source delivery. Keep the original runtime license notices; Shot Reporter's MIT license does not relicense JDK, FFmpeg, Sparkle or other dependencies. The separate FFmpeg programs can be rebuilt/replaced from the accompanying source and recipe; production update signature verification remains enforced.
+`tools/verify_macos_entitlements.py` checks the exported app again. Signing prompts must be handled explicitly, without changing Keychain ACLs or weakening validation. `--unsandboxed-host` is a separately selected alternative requiring report-root compatibility testing. Never merge or overwrite old report roots automatically. TestFlight/App Store variants exclude Sparkle.
 
-No REDline executable, RED/BRAW SDK/runtime, camera clip, sidecar, downloaded sample, or BRAW helper binary is bundled. The public original BRAW helper source/build instructions remain separate. Users obtain and authorize vendor tools/runtimes themselves. Do not convert local SDK evaluation consent into redistribution permission.
+Before publication, verify exact signed, notarized, stapled bytes, architecture/deployment target, notices, clean-source provenance, and report/preferences preservation. Use isolated test storage rather than replacing the owner's installed app. Signed older-to-newer installation and relaunch is a separate gate for automatic update delivery.
 
-## Coordinated signing and notarization
-
-Preparation emits `MAC_SIGNING_PLAN.json` and explicit entitlement profiles. `tools/sign_macos_candidate.py --candidate /private/candidate --identity EXISTING_CERTIFICATE_SHA1` performs a separately authorized existing-identity operation. It signs native objects and nested bundles from inside out with hardened runtime and timestamps, then the outer app. It never uses `--deep` to sign. Verification may use `--deep --strict`.
-
-The sandboxed host is the default and retains the existing selected-file entitlement and Sparkle IPC exceptions. Java uses the sandbox inheritance profile plus JIT permission; it does not receive a blanket library-validation exception. The Downloader XPC executable and its containing bundle receive the official optional sandbox-plus-network-client profile explicitly. Sparkle’s stock configuration leaves that profile disabled; its absence in an older release does not mean networking is broken. Installer XPC remains unsandboxed so it can replace and relaunch the application. Other existing helper entitlements are preserved as needed while debug `get-task-allow` is removed. `tools/verify_macos_entitlements.py --app /path/to/exported.app` checks this policy again after notarized export. Signing failures or Keychain authorization prompts must be handled explicitly; do not change Keychain ACLs or weaken update/signature validation to work around them.
-
-`--unsandboxed-host` only prepares an explicitly selected direct-distribution alternative. It is not the default and requires separate compatibility acceptance: old signed downloads are sandboxed, and sandboxed and ordinary report roots can both exist. Never silently select, merge, migrate or overwrite them. TestFlight/App Store builds remain sandboxed and contain no Sparkle framework.
-
-After successful native acceptance, the coordinator uses the established Xcode Developer-ID notarization workflow and existing authenticated account. No named `notarytool` profile is assumed. Retrieve an accepted upload with `xcodebuild -exportNotarizedApp -archivePath /path/to/archive.xcarchive -exportPath /path/to/new-output`; a generic `-exportArchive` is not proof of notarization. Validate the stapled ticket, Gatekeeper assessment, signature and exported entitlement policy, then create the final archive and checksums; changes after signing/notarization require repeating the affected steps. Keep the owner-installed app untouched during QA.
-
-## Required acceptance evidence
-
-Verify the actual signed sandbox host launching the staged JRE, signed SQLite library, FFmpeg and explicitly selected external tools. Test genuine RAW decoding with its sidecar/runtime, ordinary video, source preservation and saved report/media-journal restoration. A disposable uniquely identified app with its own sandbox container can check the native worker chain without touching owner reports; that does not replace final UI/file-picker/security-scoped bookmark acceptance.
-
-Before publishing a download, verify its exact signed/notarized/stapled bytes, arm64/macOS minimum, dependency and source assets, clean-source provenance and owner-data preservation. Before enabling an update feed, additionally test a genuinely signed older-to-newer install/relaunch and failure recovery in isolated storage. Directory-swap fixtures, ephemeral-key tests and reporting-only prior upgrade evidence do not certify that new native update path.
-
-## Stage authenticated update delivery without publishing
-
-After final signing/notarization/archive verification, run:
-
-```sh
-python3 tools/stage_macos_update.py \
-  --archive /private/Shot-Reporter-Mac-arm64-0.2.0-alpha.3.zip \
-  --notes /private/release-notes.txt \
-  --output /private/new-staged-feed
-```
-
-This uses the previously approved `shot-reporter` Keychain account through the official Sparkle signer, verifies independently with the public key, and emits `appcast.xml` plus `STAGED-UPDATE.json`. It never creates a key, publishes a feed, uploads media, installs an update or claims native upgrade acceptance. Keep a known compatible newer accepted release for genuine older→newer testing; the reporting-only public build cannot discover its first update.
+`tools/stage_macos_update.py` stages an authenticated appcast from an accepted archive using the approved Sparkle key account. It verifies with the public key and writes local output only. A staged feed is not publication or proof of a successful native upgrade.
