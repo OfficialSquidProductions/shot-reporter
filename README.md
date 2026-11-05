@@ -13,7 +13,7 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 - Preview landscape PDFs, export CSV/HTML, and exchange editable `.camreport` files.
 - Open the independent fictional The Last Light demo with its eight-scene script and 16-shot plan. Creating a demo never overwrites an existing report.
 
-The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). This source change does not publish a release, replace an installed app, or alter the live download page.
+The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The reporting-only desktop alpha is available in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
 
 ## Local saves and imports
 
@@ -37,6 +37,6 @@ The Android/Windows clients share a Kotlin/JVM report engine and Compose screens
 
 ## Validation and releases
 
-Published binaries may predate the current source. Refer to the exact version's recorded checks before distribution. Existing download links remain at [shotreporter.squidproductions.org](https://shotreporter.squidproductions.org); no new report-only binary has been published by this change.
+Reporting-only 0.2.0-alpha.6 is available for Apple Silicon on macOS 14+ and Windows 10+ x64. The Mac archive is signed/notarized; the Windows MSI is an unsigned manual installer with native upgrade validation. [Downloads and platform status](https://shotreporter.squidproductions.org). Mobile binaries and automatic update feeds remain unchanged. Release receipts include exact source commits, checksums, and validation limits.
 
 Physical device/field testing, a 12-hour offline day, low-storage/power-loss checks, full conflict resolution, and exact supplied report-form parity remain open. See [requirements](docs/REQUIREMENTS.md), [validation history](docs/VALIDATION.md), and [release checklist](docs/RELEASE.md). Source is MIT licensed; third-party components retain their licenses, and the supplied SP mark remains unchanged.

@@ -14,7 +14,7 @@ The retired video review, source-folder registration, slate matching, copy/renam
 
 `tools/prepare_settings_preview.py` prepares a fresh, isolated development app from a built report-only app. It refuses existing output/profile paths, pins an absolute `ShotReporterTest-*` profile, disables updates, and removes production document associations. It never replaces the owner-installed app or copies the owner's report library.
 
-No release, feed, website deployment, App Store submission, or installed-app replacement is included in this scope change. Native Windows installer and signed Mac upgrade acceptance remain separate release gates.
+The initial source/preview change did not publish or replace the installed app. Following explicit publication approval, desktop alpha 0.2.0-alpha.6 was published. Native Windows installer/upgrade validation passed; signed Mac automatic-upgrade acceptance remains a separate gate. Mobile/store binaries, automatic feeds, and the owner-installed app were not changed.
 
 ## Validation on November 5, 2026
 
@@ -26,6 +26,6 @@ No release, feed, website deployment, App Store submission, or installed-app rep
 - Isolated native Mac preview opened the demo, added take 4, opened/dismissed the PDF, and retained the four takes after quit/relaunch. Only Today, Log, Review, and Saves were present.
 - Website source build, ESM validation, canonical/legacy-host routing, and asset checks passed locally. Nothing was deployed.
 
-Android assembly could not run because the local SDK is missing. Android instrumentation, native Windows MSI install/upgrade, physical devices, and signed Mac update/relaunch were not run. These checks remain required for their respective release claims.
+Android assembly could not run locally because the SDK is missing. Android instrumentation, physical devices, and signed Mac automatic update/relaunch remain unrun. Native Windows MSI install/upgrade subsequently passed in [CI run 42062241601](https://github.com/OfficialSquidProductions/shot-reporter/actions/runs/42062241601), including preservation of reports, history, and preferences. The exact signed/notarized Mac app passed isolated reporting/PDF/quit/relaunch checks. Both public downloads were fetched anonymously and matched the accepted hashes.
 
 An existing no-op edit behavior was observed during native QA: focusing/navigating can advance report revision/history even when field values do not change. It predates this removal and remains unchanged.
