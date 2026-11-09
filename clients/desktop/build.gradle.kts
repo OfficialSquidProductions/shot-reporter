@@ -10,8 +10,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4");testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.4")
 }
 tasks.processResources {
+    // Remove the retired generated resource even on an incremental build from an older checkout.
+    doFirst { delete(destinationDir.resolve("demo-report.json")) }
     from(rootProject.projectDir.parentFile.resolve("licenses/clients/OPEN_SOURCE_NOTICES.txt")) {rename {"open-source-notices.txt"}}
-    from(rootProject.projectDir.parentFile.resolve("fixtures/camreport/owner-demo.json")) {rename {"demo-report.json"}}
     from(rootProject.projectDir.parentFile.resolve("website/assets/SP_GREEN.png")) {rename {"brand.png"}}
     from(rootProject.projectDir.parentFile.resolve("apple/Assets.xcassets/AppIcon.appiconset/mac-128-2.png")) {rename {"icon.png"}}
 }

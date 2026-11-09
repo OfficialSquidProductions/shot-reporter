@@ -20,12 +20,13 @@ class CoreTests {
         val next=base.next("3A","Test");assertEquals("9223372036854775807",next.entries.last().values["take"]);assertFails {next.next("3A","Test")}
         assertFails {base.copy(revision=Long.MAX_VALUE).record("Test","Test")}
     }
-    @Test fun completeOwnerDemoRemainsCanonicalAndIndependent() {
-        val base=Exchange.decode(File(System.getProperty("fixtures"),"owner-demo.json").readBytes());val a=base.separateDemo();val b=base.separateDemo()
-        assertNotEquals(a.id,b.id);assertEquals(3,a.active.size);assertEquals(listOf("2"),a.active.filter { "Circle" in it.flags }.map { it.values["take"] })
-        assertTrue(a.active.filter { "MOS" in it.flags || "Tail slate" in it.flags }.isEmpty());assertTrue(a.values.getValue("demoShotPlan").contains("8B · B camera · 24mm"))
-        assertEquals("84b4bea90b72a1d3d09be8925b07cdf696e9bc579386ed21c3255bb305336f87",Exchange.digest(a.values.getValue("demoScript").toByteArray()))
-        assertNotEquals(a.entries.first().id,b.entries.first().id)
+    @Test fun legacyDemoMetadataRemainsOpaqueAndRoundtrips() {
+        val legacy=Exchange.decode(File(System.getProperty("fixtures"),"owner-demo.json").readBytes())
+        val edited=legacy.next("3A","Compatibility test")
+        val restored=Exchange.read(Exchange.export(edited,"Compatibility test")).report
+        assertEquals(edited,restored)
+        assertEquals(legacy.values.getValue("demoScript"),restored.values["demoScript"])
+        assertEquals(legacy.values.getValue("demoShotPlan"),restored.values["demoShotPlan"])
     }
     @Test fun nextTakeUsesCameraAndKeepsEarlierSnapshots() {
         val old=Exchange.read(fixture()).report;val updated=old.copy(defaults=old.defaults+("iso" to "1600")).next("3A","Test")

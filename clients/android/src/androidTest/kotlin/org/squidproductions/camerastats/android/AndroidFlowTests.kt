@@ -21,21 +21,24 @@ import java.io.File
 
 class AndroidFlowTests {
     @get:Rule val ui=createAndroidComposeRule<MainActivity>()
-    @Test fun demoNextTakeAndDatabaseReopen() {
+    @Test fun blankReportNextTakeAndDatabaseReopen() {
         ui.activityRule.scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
         ui.waitUntil(10000) {val bounds=ui.onRoot().fetchSemanticsNode().boundsInRoot;bounds.height>bounds.width}
-        ui.onNodeWithText("Open The Last Light demo").performClick()
-        ui.onNode(hasText("The Last Light · DEMO") and !hasSetTextAction()).assertExists()
+        ui.onNodeWithText("New blank report").performClick()
+        ui.onNode(hasText("New production") and !hasSetTextAction()).assertExists()
+        ui.onNodeWithText("Open The Last Light demo").assertDoesNotExist()
+        ui.onNodeWithText("Read the demo script").assertDoesNotExist()
+        ui.onNodeWithText("Read the 16-shot plan").assertDoesNotExist()
+        assertFalse(ui.activity.assets.list("")!!.contains("demo-report.json"))
         capture("today-portrait")
         ui.onNodeWithText("Log").performClick()
-        ui.onNodeWithText("Scene 3A · Take 2").performScrollTo().assertIsDisplayed()
         capture("take-portrait")
         ui.onNodeWithText("Scene for next take").performScrollTo().performTextInput("3A")
         ui.onNodeWithText("Next take",substring=false).performScrollTo().performClick()
-        ui.onNodeWithText("Scene 3A · Take 4").assertExists()
+        ui.onNodeWithText("Scene 3A · Take 1").assertExists()
         ui.activityRule.scenario.recreate()
-        ui.onNode(hasText("The Last Light · DEMO") and !hasSetTextAction()).assertExists()
-        ui.runOnIdle {assertEquals(4,ui.activity.model.report.active.size);assertEquals("4",ui.activity.model.report.active.last().values["take"]);assertEquals("24mm",ui.activity.model.report.active.last().values["lens"])}
+        ui.onNode(hasText("New production") and !hasSetTextAction()).assertExists()
+        ui.runOnIdle {assertEquals(1,ui.activity.model.report.active.size);assertEquals("1",ui.activity.model.report.active.last().values["take"]);assertEquals("A",ui.activity.model.report.active.last().values["camera"])}
         ui.activityRule.scenario.onActivity {it.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
         ui.waitUntil(10000) {val bounds=ui.onRoot().fetchSemanticsNode().boundsInRoot;bounds.width>bounds.height}
         capture("today-landscape")
@@ -61,7 +64,7 @@ class AndroidFlowTests {
         try {
             intending(hasAction(Intent.ACTION_CREATE_DOCUMENT)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK,Intent().setData(uri)))
             intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK,Intent().setData(uri)))
-            ui.onNodeWithText("Open The Last Light demo").performClick();val source=ui.activity.model.report;val oldSlot=ui.activity.model.slot
+            ui.onNodeWithText("New blank report").performClick();val source=ui.activity.model.report;val oldSlot=ui.activity.model.slot
             ui.onNodeWithText("Saves").performClick()
             ui.onNodeWithText("Naming preset",substring=true).assertDoesNotExist()
             ui.onNodeWithText("Template",substring=false).assertDoesNotExist()
@@ -73,11 +76,11 @@ class AndroidFlowTests {
         } finally {Intents.release();resolver.delete(uri,null,null)}
     }
     @Test fun nativePdfAndPortableSaveRoundtrip() {
-        val context=ui.activity;val report=context.demo().separateDemo();val pdf=context.pdf(report)
+        val context=ui.activity;val report=(1..3).fold(Report()) { current, _ -> current.next("3A","Android test") };val pdf=context.pdf(report)
         assertTrue(pdf.copyOfRange(0,5).toString(Charsets.US_ASCII)=="%PDF-");assertTrue(pdf.size>1000)
         assertTrue(context.notices().contains("Independent JPEG Group"))
-        val pdfFile=File(context.cacheDir,"android-demo.pdf").apply {writeBytes(pdf)}
-        writeQa("android-demo.pdf","application/pdf") {it.write(pdf)}
+        val pdfFile=File(context.cacheDir,"android-report.pdf").apply {writeBytes(pdf)}
+        writeQa("android-report.pdf","application/pdf") {it.write(pdf)}
         android.os.ParcelFileDescriptor.open(pdfFile,android.os.ParcelFileDescriptor.MODE_READ_ONLY).use {descriptor ->android.graphics.pdf.PdfRenderer(descriptor).use {renderer ->
             assertTrue(renderer.pageCount>1)
             for(index in 0 until renderer.pageCount) renderer.openPage(index).use {page ->

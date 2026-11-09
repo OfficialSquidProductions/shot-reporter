@@ -50,7 +50,7 @@ class UpdateSafetyTests {
     @Test fun changedSaveAfterUICaptureBlocksUpdateWithoutFollowingLegacySymlinks() {
         val gateway=DesktopGateway(root)
         Repository(JdbcDriver(root.resolve("reports.sqlite3"))).use {repo->
-            val state=org.squidproductions.camerastats.ui.AppState(repo,gateway);state.demo()
+            val state=org.squidproductions.camerastats.ui.AppState(repo,gateway);state.open(Report())
             val captured=captureUpdateSaveState(state)
             state.change("Changed after update intent") {it.copy(values=it.values+("title" to "Changed report"))}
             assertFails {updateSaveGuard(root,captured)}

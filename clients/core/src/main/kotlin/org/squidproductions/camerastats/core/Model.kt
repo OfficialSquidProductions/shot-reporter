@@ -45,7 +45,4 @@ class ReportException(message: String) : IllegalArgumentException(message)
             if (!entry.reviewed) add("Row ${index+1}: review")
         }
     }
-    fun separateDemo(): Report = copy(id=identity(),revision=0,entries=entries.map { it.copy(id=identity(),created=timestamp()) },history=emptyList(),importedPackages=emptyList(),defaults=defaults + ("load" to identity())).let { r ->
-        r.copy(entries=r.entries.map { it.copy(values=it.values + ("load" to r.defaults.getValue("load"))) }).record("Created fictional The Last Light report from shared fixture revision 1.","Built-in demo fixture")
-    }
 }

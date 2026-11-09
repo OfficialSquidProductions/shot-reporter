@@ -18,9 +18,8 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.8.2")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.8.2")
 }
-val prepareBrand by tasks.registering(Copy::class) {
+val prepareBrand by tasks.registering(Sync::class) {
     from(rootProject.projectDir.parentFile.resolve("licenses/clients/OPEN_SOURCE_NOTICES.txt")) {rename {"open-source-notices.txt"}}
-    from(rootProject.projectDir.parentFile.resolve("fixtures/camreport/owner-demo.json")) {rename {"demo-report.json"}}
     from(rootProject.projectDir.parentFile.resolve("website/assets/SP_GREEN.png")) {rename {"brand.png"}}
     into(layout.buildDirectory.dir("generated/cameraAssets"))
 }

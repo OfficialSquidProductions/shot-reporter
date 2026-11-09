@@ -1,4 +1,8 @@
+// Legacy report fixtures are test-only. They are never compiled into a shipping app.
 import Foundation
+#if !SHOT_REPORTER_FIXTURE_TOOL
+import CameraStatsCore
+#endif
 
 public extension Report {
     static let demoScript = #"""
@@ -177,6 +181,16 @@ Planned · 0 takes
             if take == 2 { r.entries[i].flags.insert("Circle") }
         }
         r.record("Created fictional The Last Light report from shared fixture revision 1.",device:"Built-in demo fixture")
+        return r
+    }
+}
+
+public extension Report {
+    static func fixture() -> Report {
+        var r = Report(); r.values = ["title":"Harbor · DEMO", "date":"2026-10-19", "day":"05", "director":"Demo director", "dp":"Demo DP", "dit":"N/A — combined duties", "cycle":"Demo 01", "professor":"Demo instructor", "season":"1", "episode":"3"]
+        r.defaults.merge(["roll":"A014", "mag":"SSD 02", "resolution":"4096 × 2160", "compression":"Demo only", "aspect":"1.90:1", "shutter":"180°", "iso":"800", "temperature":"5600K / 0", "filters":"Clear", "look":"Log — reference only", "lens":"50mm", "stop":"T2.8", "height":"1.5 m", "distance":"3 m"]) { _,new in new }
+        for _ in 0..<3 { _ = r.next(scene:"12B",device:"Demo fixture") }
+        r.entries[1].flags.insert("Circle"); r.entries[1].values["remarks"] = "Demo note: clean take, hold for dialogue."; r.entries[1].reviewed = true
         return r
     }
 }

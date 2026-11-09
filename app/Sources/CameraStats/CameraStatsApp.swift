@@ -142,12 +142,8 @@ struct Workspace: View {
             Section("Local production") {
                 status
                 Picker("Open report",selection:Binding(get:{store.slot},set:{store.select($0)})) { Text("Current report").tag(store.slot); ForEach(store.documents.filter{$0.0 != store.slot},id:\.0) { doc in Text(doc.1).tag(doc.0) } }
-                Button { store.open(.demo()); selected = nil } label: { Label("Open The Last Light demo",systemImage:"play.rectangle").frame(maxWidth:.infinity,minHeight:32) }.buttonStyle(.borderedProminent)
-                Button("New blank report") { store.open(Report()); selected = nil }
-                Text("Demo data is fictional and illustrates shot and script reporting.").font(.caption).foregroundStyle(.secondary)
-                if let script = store.report.values["demoScript"] { NavigationLink("Read the demo script") { ScrollView { Text(script).font(.system(.body,design:.monospaced)).textSelection(.enabled).frame(maxWidth:800,alignment:.leading).padding() }.navigationTitle("The Last Light · Demo") } }
+                Button { store.open(Report()); selected = nil } label: { Label("New blank report",systemImage:"plus").frame(maxWidth:.infinity,minHeight:32) }.buttonStyle(.borderedProminent)
             }
-            if let plan = store.report.values["demoShotPlan"] { Section("Shared demo shots") { NavigationLink("Read the 16-shot plan") { ScrollView { Text(plan).textSelection(.enabled).frame(maxWidth:800,alignment:.leading).padding() }.navigationTitle("The Last Light · Shots") } } }
             Section("Workspace preferences") {
                 Picker("Production profile",selection:Binding(get:{store.report.profile},set:{v in store.change("Changed profile; all values retained"){$0.profile = v}})) { ForEach(Schema.profiles,id:\.self) { Text($0) } }
                 Picker("Detail",selection:$detail) { ForEach(["Quick","Standard","Full"],id:\.self) { Text($0) } }

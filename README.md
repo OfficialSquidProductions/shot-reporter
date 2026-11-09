@@ -11,7 +11,7 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 - Use Quick, Standard, and Full take views without losing recorded fields.
 - Check missing fields and self-review the report before handoff.
 - Preview landscape PDFs, export CSV/HTML, and exchange editable `.camreport` files.
-- Open the independent fictional The Last Light demo with its eight-scene script and 16-shot plan. Creating a demo never overwrites an existing report.
+- Start with a blank report or reopen an existing local report.
 
 The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The reporting-only desktop alpha is available in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
 
@@ -19,7 +19,7 @@ The current source is focused on reporting. The product scope and compatibility 
 
 Every accepted edit commits a validated report snapshot to a local SQLite database with WAL journaling and synchronous FULL durability, retaining the preceding snapshot in the same transaction. Failed or stale saves preserve the accepted in-memory report. The active document selection commits with its report. Previous snapshot files remain available for recovery. Export independent report backups regularly.
 
-`.camreport` schema 1 is a ZIP archive containing `manifest.json` and `report.json`, checked with CRCs and SHA-256. Imports show project/revision/device, additions, and conflicts. Independent additions merge by stable ID; repeated package imports are idempotent. Omitted records never mean deletion. Competing edits can be opened separately. Unsupported fields and corrupt archives are rejected before local changes. Legacy naming fields remain inert compatibility data so existing reports can round-trip safely.
+`.camreport` schema 1 is a ZIP archive containing `manifest.json` and `report.json`, checked with CRCs and SHA-256. Imports show project/revision/device, additions, and conflicts. Independent additions merge by stable ID; repeated package imports are idempotent. Omitted records never mean deletion. Competing edits can be opened separately. Unsupported fields and corrupt archives are rejected before local changes. Legacy naming fields and previously saved demo report data remain inert compatibility data so existing reports can round-trip safely. The current source does not bundle a demo script, sample report, or demo-only controls.
 
 ## Build and test
 

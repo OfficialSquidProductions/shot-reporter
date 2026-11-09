@@ -52,7 +52,6 @@ class DesktopGateway(private val root:Path):PlatformGateway {
     val icon:ImageBitmap=Image.makeFromEncoded(resource("icon.png")).toComposeImageBitmap()
     var failure:(Exception)->Unit={}
     private val prefs=Properties().apply {runCatching {Files.newInputStream(root.resolve("preferences.properties")).use {load(it)}}}
-    override fun demo():Report=Exchange.decode(resource("demo-report.json"))
     override fun notices():String=resource("open-source-notices.txt").toString(Charsets.UTF_8)
     override fun preference(key:String,fallback:String):String=prefs.getProperty(key,fallback)
     override fun preference(key:String,value:String,write:Boolean) {prefs.setProperty(key,value);runCatching {Files.createDirectories(root);Files.newOutputStream(root.resolve("preferences.properties")).use {prefs.store(it,"Shot Reporter local display preferences")}}}
@@ -90,8 +89,8 @@ fun exportDestination(selected:Path,extension:String):Path {
 
 /** Exercises the bundled runtime in CI, with only synthetic data under the supplied QA directory. */
 fun packagedSelfTest(root:Path) {
-    Files.createDirectories(root);val gateway=DesktopGateway(root);val demo=gateway.demo().separateDemo();val slot=identity()
-    Repository(JdbcDriver(root.resolve("qa.sqlite3"))).use {repo ->val hash=repo.save(slot,demo,"Packaged runtime test",null);repo.save(slot,demo.next("3A","Packaged runtime test"),"Packaged runtime test",hash)}
+    Files.createDirectories(root);val gateway=DesktopGateway(root);val report=(1..3).fold(Report(values=mapOf("title" to "Runtime QA report"))) { current, _ -> current.next("3A","Packaged runtime test") };val slot=identity()
+    Repository(JdbcDriver(root.resolve("qa.sqlite3"))).use {repo ->val hash=repo.save(slot,report,"Packaged runtime test",null);repo.save(slot,report.next("3A","Packaged runtime test"),"Packaged runtime test",hash)}
     val restored=Repository(JdbcDriver(root.resolve("qa.sqlite3"))).use {it.load(slot).report}
     check(restored.active.size==4 && restored.active.last().values["take"]=="4")
     durableExport(root.resolve("package-test.camreport"),Exchange.export(restored,"Packaged runtime test"))

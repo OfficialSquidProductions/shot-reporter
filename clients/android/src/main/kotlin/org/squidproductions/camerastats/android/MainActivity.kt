@@ -47,7 +47,6 @@ class MainActivity:ComponentActivity(),PlatformGateway {
     }
     override fun onSaveInstanceState(outState:Bundle) {outState.putString("pendingExport",pendingExport);super.onSaveInstanceState(outState)}
     override fun onDestroy() {repository?.close();super.onDestroy()}
-    override fun demo():Report=Exchange.decode(assets.open("demo-report.json").use {it.readBytes()})
     override fun notices():String=assets.open("open-source-notices.txt").bufferedReader().use {it.readText()}
     override fun preference(key:String,fallback:String):String=getSharedPreferences("workspace",MODE_PRIVATE).getString(key,fallback) ?: fallback
     override fun preference(key:String,value:String,write:Boolean) {getSharedPreferences("workspace",MODE_PRIVATE).edit().putString(key,value).apply()}

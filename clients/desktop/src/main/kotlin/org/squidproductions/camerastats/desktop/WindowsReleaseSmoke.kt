@@ -11,7 +11,7 @@ fun windowsDesktopReleaseSmoke(output:Path) {
     check(report.active.size==4)
     val csv=Reports.csv(report);val html=Reports.html(report)
     check(csv.contains("scene") && csv.contains("take"))
-    check(html.contains("The Last Light") && html.contains("<table>"))
+    check(html.contains("Runtime QA report") && html.contains("<table>"))
     durableExport(output.resolve("package-test.csv"),csv.toByteArray(Charsets.UTF_8))
     durableExport(output.resolve("package-test.html"),html.toByteArray(Charsets.UTF_8))
     Files.writeString(output.resolve("PASS.txt"),"PASS: bundled runtime, durable report reopen, next take, camreport roundtrip, PDF, CSV and HTML report exports.\n")

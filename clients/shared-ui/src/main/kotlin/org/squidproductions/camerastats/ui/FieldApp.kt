@@ -20,7 +20,6 @@ interface PlatformGateway {
     val label:String
     val releaseLabel:String get()="FIELD ALPHA 0.1"
     val brand:ImageBitmap
-    fun demo():Report
     fun notices():String
     fun importFile(complete:(ByteArray?)->Unit)
     fun exportFile(name:String,mime:String,bytes:ByteArray,complete:()->Unit)
@@ -61,7 +60,6 @@ class AppState(private val repository:Repository?,val platform:PlatformGateway) 
         val newSlot=identity();val hash=repository!!.save(newSlot,incoming,platform.label,null)
         adopt(Loaded(newSlot,incoming,hash));rememberDocument()
     }
-    fun demo()=attempt {open(platform.demo().separateDemo())}
     fun select(id:String)=attempt {adopt(repository!!.select(id))}
     fun previous()=attempt {open(repository!!.load(slot,true).report)}
     fun next(scene:String) {change("Added take") {it.next(scene,platform.label)};selected=report.active.lastOrNull()?.id}
@@ -81,7 +79,7 @@ private val Green=Color(0xff237b20)
     val dark=theme=="Dark" || theme=="System" && isSystemInDarkTheme()
     val palette=if(dark) darkColorScheme(primary=Color(0xff95df8d),secondary=Color(0xff95df8d),secondaryContainer=Color(0xff34452f),onSecondaryContainer=Color(0xffc3efbc),outline=Color(0xff8d7784),outlineVariant=Color(0xff49333f),background=Color(0xff191419),surface=Color(0xff251d23),onSurface=Color(0xfff3eaf0)) else lightColorScheme(primary=Green,secondary=Green,secondaryContainer=Color(0xffdaeed6),onSecondaryContainer=Color(0xff1c4618),background=Color(0xfffaf8f9),surface=Color.White)
     var page by remember {mutableStateOf("Today")};var detail by remember {mutableStateOf(host.preference("detail","Standard"))}
-    var documentPicker by remember {mutableStateOf(false)};var script by remember {mutableStateOf<String?>(null)}
+    var documentPicker by remember {mutableStateOf(false)}
     var notices by remember {mutableStateOf<String?>(null)}
     MaterialTheme(colorScheme=palette) {
         Surface(Modifier.fillMaxSize(),color=palette.background) {
@@ -104,11 +102,7 @@ private val Green=Color(0xff237b20)
                                 Section("Local production") {
                                     Text(if(state.blocked) "Recovery required" else state.status,style=MaterialTheme.typography.labelMedium)
                                     OutlinedButton(onClick={documentPicker=true},enabled=state.documents.isNotEmpty()) {Text("Open report")}
-                                    Button(onClick={state.demo()},enabled=!state.blocked,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text("Open The Last Light demo")}
-                                    TextButton(onClick={state.open(Report())},enabled=!state.blocked) {Text("New blank report")}
-                                    Text("Demo data is fictional.",style=MaterialTheme.typography.bodySmall)
-                                    state.report.values["demoScript"]?.let {v -> TextButton(onClick={script=v}) {Text("Read the demo script")} }
-                                    state.report.values["demoShotPlan"]?.let {v -> TextButton(onClick={script=v}) {Text("Read the 16-shot plan")} }
+                                    Button(onClick={state.open(Report())},enabled=!state.blocked,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text("New blank report")}
                                 }
                                 Section("Workspace preferences") {
                                     Choice("Production profile",state.report.profile,Schema.profiles) {v -> state.change("Changed profile; all values retained") {it.copy(profile=v)}}
@@ -145,7 +139,6 @@ private val Green=Color(0xff237b20)
             }
         }
         if(documentPicker) AlertDialog(onDismissRequest={documentPicker=false},title={Text("Open local report")},text={LazyColumn(Modifier.heightIn(max=400.dp)) {items(state.documents,key={it.slot}) {doc -> TextButton(onClick={state.select(doc.slot);documentPicker=false}) {Text("${doc.title} · r${doc.revision}")} }}},confirmButton={TextButton(onClick={documentPicker=false}) {Text("Done")}})
-        script?.let {text -> AlertDialog(onDismissRequest={script=null},title={Text("The Last Light · Demo")},text={Text(text,Modifier.heightIn(max=550.dp).verticalScroll(rememberScrollState()))},confirmButton={TextButton(onClick={script=null}) {Text("Done")}}) }
         state.pending?.let {incoming ->
             val preview=runCatching {Exchange.preview(state.report,incoming)}
             AlertDialog(onDismissRequest={state.pending=null},title={Text("Import preview")},text={Column(Modifier.heightIn(max=500.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
