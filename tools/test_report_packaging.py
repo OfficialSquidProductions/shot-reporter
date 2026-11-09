@@ -122,7 +122,7 @@ class ReportPackagingTests(unittest.TestCase):
             metadata = json.loads((out / 'WINDOWS-RELEASE.json').read_text())
             self.assertEqual(metadata['version'], '0.2.0-alpha.7')
             self.assertEqual(metadata['msiVersion'], '0.2.3')
-            self.assertEqual(metadata['build'], 9)
+            self.assertEqual(metadata['build'], 10)
             self.assertEqual(metadata['sourceCommit'], 'a' * 40)
             self.assertTrue((out / 'Shot-Reporter-Windows-0.2.0-alpha.7.msi').is_file())
             self.assertTrue((out / 'SHA256SUMS-Windows.txt').is_file())
