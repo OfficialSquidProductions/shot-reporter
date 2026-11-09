@@ -36,5 +36,5 @@ RunApp $installed @('--verify-report-upgrade',('"'+(Join-Path $oldQA 'package-te
 $reporting=Join-Path $Output 'installed-reporting'
 RunApp $installed @('--desktop-release-smoke',('"'+$reporting+'"')) (Join-Path $reporting 'PASS.txt')
 $products=@(Get-ItemProperty 'HKLM:/Software/Microsoft/Windows/CurrentVersion/Uninstall/*' | Where-Object {$_.DisplayName -eq 'Shot Reporter'})
-if ($products.Count -ne 1 -or $products[0].DisplayVersion -ne '0.2.2') {throw 'Installed product version/upgrade identity is not unique 0.2.2'}
-Set-Content -LiteralPath (Join-Path $Output 'PASS.txt') -Value 'PASS: previous 0.2.0-alpha.2/MSI 0.2.1 -> 0.2.0-alpha.6/MSI 0.2.2 install, isolated report/history/preferences preservation, packaged and installed reporting smoke. Successful signed auto-update remains unvalidated.'
+if ($products.Count -ne 1 -or $products[0].DisplayVersion -ne '0.2.3') {throw 'Installed product version/upgrade identity is not unique 0.2.3'}
+Set-Content -LiteralPath (Join-Path $Output 'PASS.txt') -Value 'PASS: previous 0.2.0-alpha.2/MSI 0.2.1 -> 0.2.0-alpha.7/MSI 0.2.3 install, isolated report/history/preferences preservation, packaged and installed reporting smoke. Successful signed auto-update remains unvalidated.'

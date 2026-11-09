@@ -9,7 +9,7 @@ The native reporting app retains application ID `org.squidproductions.camerastat
 ```sh
 python3 tools/build_apple.py --distribution direct
 python3 tools/prepare_macos_desktop_release.py \
-  --version 0.2.0-alpha.6 --build 9 \
+  --version 0.2.0-alpha.7 --build 10 \
   --output /private/new-reporting-candidate
 ```
 

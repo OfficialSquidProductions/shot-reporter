@@ -88,7 +88,7 @@ jobs:
         run: python tools/stage_windows_desktop_release.py --qa "${{ runner.temp }}/shot-reporter-windows-release-qa" --output windows-release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Shot-Reporter-Windows-0.2.0-alpha.6-${{ github.sha }}
+          name: Shot-Reporter-Windows-0.2.0-alpha.7-${{ github.sha }}
           path: windows-release/*
           if-no-files-found: error
           retention-days: 14
