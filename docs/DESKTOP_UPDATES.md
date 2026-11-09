@@ -89,3 +89,20 @@ The public Mac 0.1.1/build 2 archive has no Sparkle framework or update keys. Th
 Mac alpha 3/build 5 preparation includes the existing approved public key, zero signed-feed-failure fallback, and the same sandbox. Sparkle's signed Downloader XPC already owns the outbound network entitlement; the host does not gain network access. `tools/stage_macos_update.py` inspects an exact signed/notarized/stapled archive, its clean provenance, matching public key/feed, and protected metadata, then uses Sparkle's official `sign_update --account shot-reporter` without exporting the private key. Release notes are plain text embedded as escaped HTML in the signed feed; architecture is restricted to arm64/macOS 14+. Output stays outside Git and is never published by the tool. `tools/verify_macos_update.swift` authenticates feeds and artifacts with the public key only, including exact byte lengths and rejection of modified/duplicate/trailing signature blocks.
 
 Do not copy a staged appcast to the production `updates/macos/appcast.xml` path until report picker/reopen acceptance and a genuinely signed bootstrap→newer native install/relaunch have passed. Public URLs, archive lengths/hashes/signatures, notes, save/postpone gates and report recovery data must match that exact accepted release. Windows additionally needs a trusted publisher and service-compatible identity policy; see [Windows signing setup](WINDOWS_SIGNING_SETUP.md). No reference application's disabled publisher verification is inherited.
+
+## November 9, 2026 repair status
+
+The published alpha.6/build 9 Mac release removes Footage, video review, clip matching, renamed-copy workflows, and naming-template controls. An alpha.5/build 8 installation still contains those features. The production `updates/macos/appcast.xml` path was confirmed absent through the connected GitHub API on November 9; a published ZIP alone does not make it an in-app update.
+
+The existing alpha.6 archive and staged appcast both passed public-key signature verification. The archive matched the published GitHub asset digest, and Apple signature, notarization and stapling checks passed. A local manual upgrade from build 8 to build 9 preserved report fields and takes; this does **not** count as native Sparkle installation acceptance. Existing no-op focus/reopen changes can still increment revision/history. No new release or feed was published during this repair.
+
+The updater repair source now:
+
+- Starts the updater for an early manual check instead of silently ignoring it, and permits retry after startup failure.
+- Keeps ordinary no-new-update and user-cancellation outcomes out of failure diagnostics.
+- Offers Update Status and, for trusted direct copies, View Available Downloads in the app menu.
+- Distinguishes offline, unavailable feed/download, and signature-validation failures without relaxing authentication, channel, archive-host or save gates.
+
+Verification: 52 Swift tests and 23 Python packaging/staging tests passed. The macOS Debug build passed from a fresh temporary DerivedData directory. The isolated preview displayed Update Status, dismissed normally, handled a repeated manual check, and closed normally. Existing Desktop DerivedData locations produced Xcode build-database disk I/O errors; no owner data was deleted to repair them. Xcode also reported an out-of-date CoreSimulator runtime, so no simulator validation is claimed for this Mac-only change.
+
+These source changes are not in the published build 9. Any release containing them must use a newer monotonic build number, new exact-source signing/notarization evidence, and the normal publication process. The production feed remains inactive until genuine signed older-to-newer Sparkle download/install/relaunch acceptance, including report preservation and failure/cancel behavior, passes. Do not replace a public build's bytes or treat this manual upgrade as satisfying that gate.

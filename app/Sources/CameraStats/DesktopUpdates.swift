@@ -13,6 +13,7 @@ import CameraStatsCore
 struct DesktopUpdatePolicy {
     static let identifier = "org.squidproductions.camerastats"
     static let team = "FZ298DXLS3"
+    static let downloadsURL = URL(string:"https://github.com/OfficialSquidProductions/shot-reporter/releases")!
     enum Distribution: Equatable { case direct, testFlight, appStore, development, unconfigured }
     enum Channel: String { case alpha, stable, unconfigured }
     let distribution: Distribution
@@ -105,10 +106,11 @@ struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:St
     private(set) var started=false
     private let policy:DesktopUpdatePolicy
     private var controller:SPUStandardUpdaterController?
+    private let startUpdater:@MainActor (SPUUpdater)throws->Void
     let gate=DesktopUpdateSaveGate()
     var confirmInstall:(()->Bool)?
     var presentNotice:((String,String)->Void)?
-    init(policy:DesktopUpdatePolicy = .installed()) {self.policy=policy;super.init()}
+    init(policy:DesktopUpdatePolicy = .installed(),startUpdater:@escaping @MainActor (SPUUpdater)throws->Void = {try $0.start()}) {self.policy=policy;self.startUpdater=startUpdater;super.init()}
     private var automaticCheckState=false
     var automaticChecks:Bool {get {automaticCheckState} set {controller?.updater.automaticallyChecksForUpdates=newValue;automaticCheckState=controller?.updater.automaticallyChecksForUpdates ?? false}}
     var isDirect:Bool {policy.distribution == .direct && policy.unavailableReason == nil}
@@ -125,14 +127,18 @@ struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:St
             guard try Exchange.encoder().encode(durable) == Exchange.encoder().encode(store.report) else {throw DesktopUpdateError("The local report changed in another window or app instance. Reopen it before updating.")}
         }
     }
-    func start() {
+    func start(automaticallyCheck:Bool=true) {
         guard !started else {return};started=true
         if let reason=policy.unavailableReason {status=reason;return}
         let controller=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:self,userDriverDelegate:nil)
-        self.controller=controller;controller.startUpdater();automaticCheckState=controller.updater.automaticallyChecksForUpdates
+        do {try startUpdater(controller.updater)} catch {
+            // A failed start must remain retryable, not leave a silent nil controller.
+            started=false;status=Self.failureMessage(error as NSError);return
+        }
+        self.controller=controller;automaticCheckState=controller.updater.automaticallyChecksForUpdates
         // Sparkle's scheduled checks continue daily. A launch check is silent
         // when current/offline, and honours the user's automatic-check setting.
-        if controller.updater.automaticallyChecksForUpdates {
+        if automaticallyCheck && controller.updater.automaticallyChecksForUpdates {
             controller.updater.checkForUpdatesInBackground()
             status="Checking the \(channelName.lowercased()) channel; installations require confirmation."
         } else {status="Automatic update checks are off. Choose Check for Updates for a manual check."}
@@ -141,7 +147,27 @@ struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:St
         if policy.distribution == .testFlight {NSWorkspace.shared.open(URL(fileURLWithPath:"/Applications/TestFlight.app"));return}
         if policy.distribution == .appStore {NSWorkspace.shared.open(URL(string:"macappstore://showUpdatesPage")!);return}
         if let reason=policy.unavailableReason {show("Updates unavailable",reason);return}
-        if gate.pending {continueInstall()} else {controller?.checkForUpdates(nil)}
+        if gate.pending {continueInstall();return}
+        if controller == nil {start(automaticallyCheck:false)}
+        guard let controller else {show("Updates unavailable",status);return}
+        status="Checking the \(channelName.lowercased()) channel; installations require confirmation."
+        controller.checkForUpdates(nil)
+    }
+    func showStatus() {show("Shot Reporter Updates",status)}
+    static func failureMessage(_ error:NSError)->String {
+        var current:NSError?=error,seen=Set<ObjectIdentifier>(),errors:[NSError]=[]
+        while let item=current,errors.count<8,seen.insert(ObjectIdentifier(item)).inserted {
+            errors.append(item);current=item.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        let detail:String
+        if errors.contains(where:{$0.domain == NSURLErrorDomain && $0.code == NSURLErrorNotConnectedToInternet}) {
+            detail="The Mac is offline. Reconnect and choose Check for Updates again."
+        } else if errors.contains(where:{$0.domain == SUSparkleErrorDomain && [Int(SUError.signatureError.rawValue),Int(SUError.validationError.rawValue)].contains($0.code)}) {
+            detail="The update could not be authenticated. Installation was blocked. Do not bypass the signature check."
+        } else if errors.contains(where:{$0.domain == SUSparkleErrorDomain && [Int(SUError.downloadError.rawValue),Int(SUError.appcastError.rawValue)].contains($0.code)}) {
+            detail="The update feed or download is unavailable. Try again later, or choose View Available Downloads in the Shot Reporter menu for the published installers."
+        } else {detail="Update check or install stopped: \(error.localizedDescription). Choose Update Status or View Available Downloads in the Shot Reporter menu for help."}
+        return detail+" Local reports and recovery snapshots remain in their existing locations."
     }
     private func show(_ title:String,_ detail:String) {if let presentNotice {presentNotice(title,detail);return};let alert=NSAlert();alert.messageText=title;alert.informativeText=detail;alert.addButton(withTitle:"Keep Working");alert.runModal()}
     private func continueInstall() {
@@ -170,8 +196,18 @@ struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:St
         try policy.validate(build:item.versionString,channel:item.channel,archive:item.fileURL)
     }
     func updater(_ updater:SPUUpdater,didFindValidUpdate item:SUAppcastItem) {availableVersion=item.displayVersionString;status="Shot Reporter \(item.displayVersionString) is available. Review release notes before installing."}
-    func updaterDidNotFindUpdate(_ updater:SPUUpdater) {availableVersion=nil;status="You have the newest available \(channelName.lowercased()) build."}
-    func updater(_ updater:SPUUpdater,didAbortWithError error:Error) {DiagnosticsCenter.shared.capture(.updates,error:error as NSError);status="Update check or install stopped: \(error.localizedDescription). Local reports and recovery snapshots remain in their existing locations.";gate.updateAborted()}
+    func updaterDidNotFindUpdate(_ updater:SPUUpdater) {availableVersion=nil;status="No compatible newer update is currently available on the \(channelName.lowercased()) channel."}
+    func updater(_ updater:SPUUpdater,didAbortWithError error:Error) {
+        let error=error as NSError
+        availableVersion=nil;gate.updateAborted()
+        if error.domain == SUSparkleErrorDomain,error.code == Int(SUError.noUpdateError.rawValue) {
+            updaterDidNotFindUpdate(updater);return
+        }
+        if error.domain == SUSparkleErrorDomain,error.code == Int(SUError.installationCanceledError.rawValue) {
+            status="Update installation cancelled. Keep working and choose Check for Updates when ready.";return
+        }
+        DiagnosticsCenter.shared.capture(.updates,error:error);status=Self.failureMessage(error)
+    }
     func updater(_ updater:SPUUpdater,shouldPostponeRelaunchForUpdate item:SUAppcastItem,untilInvokingBlock installHandler:@escaping ()->Void)->Bool {
         gate.postpone(installHandler);DispatchQueue.main.async {[weak self] in self?.continueInstall()};return true
     }
@@ -189,6 +225,7 @@ struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:St
     init(policy:DesktopUpdatePolicy = .installed()) {self.policy=policy;super.init()}
     func configure(store:Store) {}
     func start() {status=policy.unavailableReason ?? "Updates are managed by the store."}
+    func showStatus() {let alert=NSAlert();alert.messageText="Shot Reporter Updates";alert.informativeText=status;alert.addButton(withTitle:"OK");alert.runModal()}
     func check() {
         if policy.distribution == .testFlight {
             let testFlight=URL(fileURLWithPath:"/Applications/TestFlight.app")
@@ -210,6 +247,8 @@ struct DesktopUpdateCommands:Commands {
     var body:some Commands {
         CommandGroup(after:.appInfo) {
             Button(updates.availableVersion.map {"Update to \($0)…"} ?? "Check for Updates…") {updates.check()}
+            Button("Update Status…") {updates.showStatus()}
+            if updates.isDirect {Button("View Available Downloads…") {NSWorkspace.shared.open(DesktopUpdatePolicy.downloadsURL)}}
             Toggle("Automatically Check for Updates",isOn:Binding(get:{updates.automaticChecks},set:{updates.automaticChecks=$0})).disabled(!updates.isDirect)
         }
     }

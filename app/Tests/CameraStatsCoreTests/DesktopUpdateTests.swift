@@ -51,6 +51,37 @@ final class DesktopUpdateTests:XCTestCase {
         let fixture=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:nil,userDriverDelegate:nil)
         XCTAssertThrowsError(try updates.updater(fixture.updater,shouldProceedWithUpdate:SUAppcastItem.empty(),updateCheck:.updates))
     }
+    @MainActor func testStartupFailureRetriesAndNeverSilentlyIgnoresManualCheck() {
+        var starts=0,notices:[String]=[]
+        let updates=DesktopUpdates(policy:policy(),startUpdater:{_ in starts += 1;throw DesktopUpdateError("startup fixture")})
+        updates.presentNotice={_,text in notices.append(text)}
+        updates.start();XCTAssertFalse(updates.started);XCTAssertEqual(starts,1)
+        updates.check();XCTAssertEqual(starts,2);XCTAssertFalse(updates.started)
+        XCTAssertEqual(notices.count,1);XCTAssertTrue(notices[0].contains("startup fixture"))
+    }
+    @MainActor func testNoUpdateAndCancellationAreNotReportedAsFailures() {
+        let updates=DesktopUpdates(policy:policy())
+        let fixture=SPUStandardUpdaterController(startingUpdater:false,updaterDelegate:nil,userDriverDelegate:nil)
+        updates.updater(fixture.updater,didAbortWithError:NSError(domain:SUSparkleErrorDomain,code:Int(SUError.noUpdateError.rawValue)))
+        XCTAssertTrue(updates.status.contains("No compatible newer update"))
+        XCTAssertFalse(updates.status.contains("stopped"))
+        updates.updater(fixture.updater,didAbortWithError:NSError(domain:SUSparkleErrorDomain,code:Int(SUError.installationCanceledError.rawValue)))
+        XCTAssertTrue(updates.status.contains("cancelled"));XCTAssertFalse(updates.gate.installing)
+    }
+    @MainActor func testFailedFeedOffersRecoveryWithoutDisablingAuthentication() {
+        let unavailable=NSError(domain:SUSparkleErrorDomain,code:Int(SUError.downloadError.rawValue))
+        XCTAssertTrue(DesktopUpdates.failureMessage(unavailable).contains("feed or download is unavailable"))
+        XCTAssertTrue(DesktopUpdates.failureMessage(unavailable).contains("View Available Downloads"))
+        let offline=NSError(domain:SUSparkleErrorDomain,code:Int(SUError.downloadError.rawValue),userInfo:[NSUnderlyingErrorKey:NSError(domain:NSURLErrorDomain,code:NSURLErrorNotConnectedToInternet)])
+        XCTAssertTrue(DesktopUpdates.failureMessage(offline).contains("Mac is offline"))
+        let signature=NSError(domain:SUSparkleErrorDomain,code:Int(SUError.signatureError.rawValue))
+        XCTAssertTrue(DesktopUpdates.failureMessage(signature).contains("Installation was blocked"))
+        XCTAssertFalse(DesktopUpdates.failureMessage(signature).contains("published installers"))
+        XCTAssertEqual(DesktopUpdatePolicy.downloadsURL.absoluteString,"https://github.com/OfficialSquidProductions/shot-reporter/releases")
+        let updates=DesktopUpdates(policy:policy(.alpha,.development));var notices:[String]=[]
+        updates.presentNotice={_,text in notices.append(text)};updates.start();updates.showStatus()
+        XCTAssertEqual(notices,[updates.status])
+    }
     func testChannelAndMonotonicBuildPolicy() throws {
         try policy().validate(build:"3",channel:"alpha",archive:archive)
         try policy().validate(build:"3",channel:nil,archive:archive)

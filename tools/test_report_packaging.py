@@ -37,7 +37,7 @@ class ReportPackagingTests(unittest.TestCase):
                 if Path(dest).parent.name == 'legal':
                     return Path(dest).write_text('synthetic license')
                 return real_copy(source, dest, **kwargs)
-            with patch.object(sys, 'argv', ['prepare', '--app-input', str(app), '--output', str(out), '--public-update-key', stage.PUBLIC_KEY]), patch.object(prepare, 'capture', side_effect=capture), patch.object(prepare, 'macho_info', return_value=None), patch.object(prepare.shutil, 'copyfile', side_effect=copy_license), contextlib.redirect_stdout(io.StringIO()):
+            with patch.object(sys, 'argv', ['prepare', '--app-input', str(app), '--output', str(out), '--version', '0.2.0-alpha.3', '--build', '5', '--public-update-key', stage.PUBLIC_KEY]), patch.object(prepare, 'capture', side_effect=capture), patch.object(prepare, 'macho_info', return_value=None), patch.object(prepare.shutil, 'copyfile', side_effect=copy_license), contextlib.redirect_stdout(io.StringIO()):
                 prepare.main()
             candidate = out / 'Shot Reporter.app'
             self.assertEqual(sorted(p.name for p in (out / 'signing').iterdir()), ['downloader.plist', 'host.plist'])
