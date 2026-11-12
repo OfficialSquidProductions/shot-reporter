@@ -8,7 +8,7 @@ public struct Field: Identifiable {
 }
 public enum Schema {
     public static let project: [Field] = [Field("title", "Production title", "Project / crew"), Field("date", "Shooting date", "Project / crew"), Field("day", "Shooting day", "Project / crew"), Field("director", "Director", "Project / crew"), Field("dp", "Director of photography", "Project / crew"), Field("dit", "DIT / data — use N/A if unassigned", "Project / crew"), Field("cycle", "Cycle Group #", "Student"), Field("professor", "Cohort Professor", "Student"), Field("season", "Season", "Project / crew"), Field("episode", "Episode", "Project / crew")]
-    public static let settings: [Field] = [Field("camera", "Camera", "Camera / media"), Field("roll", "Camera roll / reel", "Camera / media"), Field("mag", "SSD / physical mag", "Camera / media"), Field("load", "Load ID", "Camera / media"), Field("resolution", "Resolution", "Recording settings"), Field("compression", "Compression", "Recording settings"), Field("aspect", "Aspect ratio", "Recording settings"), Field("playbackRate", "Project time base (e.g. 24000/1001)", "Recording settings"), Field("sensorRate", "Varispeed / sensor FPS", "Recording settings"), Field("shutter", "Shutter angle / speed", "Recording settings"), Field("iso", "ISO", "Recording settings"), Field("temperature", "Color temperature / tint", "Recording settings"), Field("filters", "Filters / internal & external ND", "Recording settings"), Field("look", "Log / gamut / look reference", "Recording settings"), Field("lens", "Lens / focal length", "Lens / measurements"), Field("stop", "T-stop", "Lens / measurements"), Field("height", "Camera height (include units)", "Lens / measurements"), Field("distance", "Focus / subject distance (include units)", "Lens / measurements")]
+    public static let settings: [Field] = [Field("camera", "Camera", "Camera / media"), Field("mag", "SSD / physical mag", "Camera / media"), Field("load", "Load ID", "Camera / media"), Field("resolution", "Resolution", "Recording settings"), Field("compression", "Compression", "Recording settings"), Field("aspect", "Aspect ratio", "Recording settings"), Field("playbackRate", "Project time base (e.g. 24000/1001)", "Recording settings"), Field("sensorRate", "Varispeed / sensor FPS", "Recording settings"), Field("shutter", "Shutter angle / speed", "Recording settings"), Field("iso", "ISO", "Recording settings"), Field("temperature", "Color temperature / tint", "Recording settings"), Field("filters", "Filters / internal & external ND", "Recording settings"), Field("look", "Log / gamut / look reference", "Recording settings"), Field("lens", "Lens / focal length", "Lens / measurements"), Field("stop", "T-stop", "Lens / measurements"), Field("height", "Camera height (include units)", "Lens / measurements"), Field("distance", "Focus / subject distance (include units)", "Lens / measurements")]
     public static let take: [Field] = [Field("scene", "Scene / setup", "Slate"), Field("take", "Take label", "Slate"), Field("remarks", "Camera remarks", "Notes"), Field("dpNotes", "DP intent / selects", "Notes"), Field("continuity", "Script / continuity notes", "Notes"), Field("editorNotes", "Editorial notes", "Notes"), Field("sound", "Sound roll / file", "Post references"), Field("originalFilename", "Original clip filename", "Post references"), Field("timecode", "Source timecode (manual)", "Post references")]
     public static let profiles = ["Student / Cinematic Arts Full Report", "Small Crew / Combined Duties", "Feature / Television Department", "Custom Production"]
     public static let positions = ["All Duties", "2nd AC", "1st AC", "DP / operator", "DIT / data", "Script / continuity"]
@@ -33,11 +33,16 @@ public struct Change: Codable, Equatable {
     public var summary: String
     public init(device: String, summary: String) { self.device = device; self.summary = summary }
 }
+public enum ProductionMode: String, CaseIterable, Identifiable {
+    case movie, tv
+    public var id: String { rawValue }
+    public var title: String { self == .movie ? "Movie" : "TV" }
+}
 public struct Report: Codable, Equatable {
     public var id = UUID().uuidString
     public var revision = 0
     public var values: [String:String] = [:]
-    public var defaults: [String:String] = ["camera":"A", "roll":"A001", "load":UUID().uuidString, "playbackRate":"24000/1001", "sensorRate":"24000/1001"]
+    public var defaults: [String:String] = ["camera":"A", "load":UUID().uuidString, "playbackRate":"24000/1001", "sensorRate":"24000/1001"]
     public var profile = Schema.profiles[0]
     public var positions = ["All Duties"]
     public var entries: [Entry] = []
@@ -46,6 +51,12 @@ public struct Report: Codable, Equatable {
     public var namingSettings: NamingSettings?
     public var namingTemplate = "{project}_SC{scene}_TK{take}_CAM-{camera}"
     public init() { values["date"] = ISO8601DateFormatter().string(from: Date()).prefix(10).description }
+    public var productionMode: ProductionMode {
+        get { ProductionMode(rawValue:values["productionMode",default:""]) ?? .movie }
+        set { values["productionMode"] = newValue.rawValue }
+    }
+    public var projectFields: [Field] { Schema.project.filter { productionMode == .tv || !["season","episode"].contains($0.id) } }
+    public var visibleProjectValues: [String:String] { values.filter { $0.key != "productionMode" && (productionMode == .tv || !["season","episode"].contains($0.key)) } }
     public var active: [Entry] { entries.filter { !$0.deleted } }
     public mutating func record(_ summary: String, device: String) { revision += 1; history.append(Change(device:device, summary:summary)) }
     public mutating func next(scene: String, device: String) -> String {

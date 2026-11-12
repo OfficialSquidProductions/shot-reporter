@@ -14,7 +14,7 @@ public enum Reports {
         func esc(_ s: String) -> String { s.replacingOccurrences(of:"&",with:"&amp;").replacingOccurrences(of:"<",with:"&lt;").replacingOccurrences(of:">",with:"&gt;").replacingOccurrences(of:"\"",with:"&quot;") }
         let fields = Schema.take + Schema.settings
         let rows = report.active.map { e in "<tr>" + fields.map{"<td>\(esc(e.values[$0.id,default:""]))</td>"}.joined() + "<td>\(esc(e.flags.sorted().joined(separator:", ")))</td></tr>" }.joined()
-        return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shot Reporter report</title><style>body{font:14px system-ui;margin:32px;color:#241d21}table{border-collapse:collapse}td,th{border:1px solid #777;padding:8px;white-space:pre-wrap}thead{display:table-header-group}</style><h1>\(esc(report.values["title",default:"Untitled"]))</h1><p>A Squid Productions Software · Revision \(report.revision) · \(report.missing.isEmpty ? "Ready for Submission" : "DRAFT — \(report.missing.count) missing requirements")</p><p>\(esc(report.values.sorted{$0.key < $1.key}.map{"\($0.key): \($0.value)"}.joined(separator:" · ")))</p><table><thead><tr>" + fields.map{"<th>\(esc($0.title))</th>"}.joined() + "<th>Flags</th></tr></thead><tbody>\(rows)</tbody></table></html>"
+        return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shot Reporter report</title><style>body{font:14px system-ui;margin:32px;color:#241d21}table{border-collapse:collapse}td,th{border:1px solid #777;padding:8px;white-space:pre-wrap}thead{display:table-header-group}</style><h1>\(esc(report.values["title",default:"Untitled"]))</h1><p>A Squid Productions Software · Revision \(report.revision) · \(report.missing.isEmpty ? "Ready for Submission" : "DRAFT — \(report.missing.count) missing requirements")</p><p>\(esc(report.visibleProjectValues.sorted{$0.key < $1.key}.map{"\($0.key): \($0.value)"}.joined(separator:" · ")))</p><table><thead><tr>" + fields.map{"<th>\(esc($0.title))</th>"}.joined() + "<th>Flags</th></tr></thead><tbody>\(rows)</tbody></table></html>"
     }
     public static func pdf(_ report: Report) throws -> Data {
         let output = NSMutableData()
@@ -40,9 +40,9 @@ public enum Reports {
             page += 1; cg.beginPDFPage(nil); draw("Shot Reporter · Cinematic Arts Camera Report",28,30,16); draw("A Squid Productions Software",28,47,9)
             draw("\(report.values["title",default:"Untitled"]) · \(report.values["date",default:""]) · Day \(report.values["day",default:""]) · Revision \(report.revision) · Page \(page)",28,65,10)
             draw(report.missing.isEmpty ? "READY FOR SUBMISSION · self-reviewed local report" : "DRAFT · \(report.missing.count) outstanding requirements — export is not proof of submission",28,82,9)
-            let metadata = Schema.project.filter{!["title","date","day"].contains($0.id)}.map{"\($0.title): \(report.values[$0.id,default:"—"])"}.joined(separator:" · ")
+            let metadata = report.projectFields.filter{!["title","date","day"].contains($0.id)}.map{"\($0.title): \(report.values[$0.id,default:"—"])"}.joined(separator:" · ")
             for (i,line) in wrap(metadata,width:786).enumerated() { draw(line,28,100+CGFloat(i)*12) }
-            let headers = ["Scene","Take","Camera / roll","Lens","T-stop","Height","Distance","Recording settings","Remarks / flags / role notes"]
+            let headers = ["Scene","Take","Camera","Lens","T-stop","Height","Distance","Recording settings","Remarks / flags / role notes"]
             y = 145
             for i in headers.indices { draw(headers[i],xs[i],y,8) }; y += 10
             cg.setStrokeColor(CGColor(gray:0.5,alpha:1)); cg.move(to:CGPoint(x:28,y:595-y)); cg.addLine(to:CGPoint(x:814,y:595-y)); cg.strokePath(); y += 14
@@ -53,7 +53,7 @@ public enum Reports {
             let v = e.values
             let technical = Schema.settings.filter{!["camera","roll","lens","stop","height","distance"].contains($0.id)}.map{"\($0.title): \(v[$0.id,default:"—"])"}.joined(separator:"; ")
             let notes = (["Flags: " + (e.flags.isEmpty ? "None" : e.flags.sorted().joined(separator:", ")), e.reviewed ? "Reviewed" : "Review pending"] + Schema.take.filter{!["scene","take"].contains($0.id)}.filter{!v[$0.id,default:""].isEmpty}.map{"\($0.title): \(v[$0.id,default:""])"}).joined(separator:"\n")
-            let columns = [v["scene",default:"—"],v["take",default:"—"],v["camera",default:"—"]+" / "+v["roll",default:"—"],v["lens",default:"—"],v["stop",default:"—"],v["height",default:"—"],v["distance",default:"—"],technical,notes]
+            let columns = [v["scene",default:"—"],v["take",default:"—"],v["camera",default:"—"],v["lens",default:"—"],v["stop",default:"—"],v["height",default:"—"],v["distance",default:"—"],technical,notes]
             let lines = columns.enumerated().map{wrap($0.element,width:widths[$0.offset])}
             for n in 0..<(lines.map(\.count).max() ?? 1) {
                 if y > 555 { cg.endPDFPage(); begin(); draw("Continued take \(v["scene",default:""]) / \(v["take",default:""])",28,y,8); y += 14 }

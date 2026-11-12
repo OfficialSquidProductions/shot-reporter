@@ -8,6 +8,8 @@ import CameraStatsCore
     var error: String? {didSet {if error != nil {DiagnosticsCenter.shared.capture(.reports)}}}
     var slot = UUID().uuidString
     var documents: [(String,String)] = []
+    var deletedDocuments: [(String,String)] = []
+    struct DeletionRequest: Identifiable { let id:String; let title:String; let fingerprint:String }
     var blocked = false
     var pendingImport = false
     var lastExportedRevision: Int? { preferences.object(forKey:"exported-"+slot) as? Int }
@@ -22,7 +24,7 @@ import CameraStatsCore
         do {
             let repo = try Repository(url:self.root.appendingPathComponent("reports.sqlite3")); repository = repo
             // One-time, idempotent migration. Legacy snapshots stay untouched as recovery files.
-            let known = Set(try repo.list().map(\.slot))
+            let known = try repo.knownSlots()
             for url in try FileManager.default.contentsOfDirectory(at:self.root,includingPropertiesForKeys:nil) where url.pathExtension == "camreport" && !url.lastPathComponent.contains("previous") {
                 let id=url.deletingPathExtension().lastPathComponent
                 if !known.contains(id) {let legacy=try Exchange.read(Data(contentsOf:url)); _=try repo.save(slot:id,report:legacy.report,device:device,expectedFingerprint:nil)}
@@ -33,6 +35,7 @@ import CameraStatsCore
         } catch { self.error = "Local report could not be read. Its bytes were preserved. Export/recover it before creating a new report. \(error.localizedDescription)"; blocked = true }
     }
     func refresh() {
+        deletedDocuments = ((try? repository?.list(deleted:true)) ?? []).map{($0.slot,$0.title + " · r\($0.revision)")}
         documents = ((try? repository?.list()) ?? []).map{($0.slot,$0.title + " · r\($0.revision)")}
     }
     func persist(_ next: Report) throws {
@@ -43,7 +46,7 @@ import CameraStatsCore
     }
     func change(_ summary: String = "Edited report", _ action: (inout Report)->Void) {
         guard !blocked else { error = "Recovery is required before edits can be accepted."; return }
-        var next = report; action(&next); if next.revision == report.revision { next.record(summary,device:device) }
+        var next = report; action(&next); guard next != report else {return}; if next.revision == report.revision { next.record(summary,device:device) }
         do { try persist(next) } catch { self.error = "Save failed; this change was not accepted. \(error.localizedDescription)" }
     }
     func open(_ r: Report) {
@@ -52,6 +55,29 @@ import CameraStatsCore
     }
     func select(_ id: String) {
         do { guard let repository else {throw ReportError.invalid("Local database unavailable")}; let loaded=try repository.select(id); slot=id; report=loaded.report; fingerprint=loaded.fingerprint; blocked=false; saved=Date() } catch { self.error = error.localizedDescription }
+    }
+    func deletionRequest(for id:String) throws ->DeletionRequest {
+        guard !blocked,!pendingImport else {throw ReportError.invalid("Resolve recovery or import before deleting a report.")}
+        guard let repository else {throw ReportError.invalid("Local database unavailable")}
+        let loaded = try repository.load(id)
+        return DeletionRequest(id:id,title:loaded.report.values["title",default:"Untitled"],fingerprint:loaded.fingerprint)
+    }
+    private func adopt(_ loaded:Repository.Loaded) {
+        slot=loaded.slot;report=loaded.report;fingerprint=loaded.fingerprint;saved=Date();blocked=false;error=nil
+    }
+    func deleteReport(_ request:DeletionRequest) {
+        do {
+            guard !blocked,!pendingImport,let repository else {throw ReportError.invalid("Resolve recovery or import before deleting a report.")}
+            if let next = try repository.delete(request.id,expectedFingerprint:request.fingerprint) {adopt(next)}
+            else {report=Report();slot=UUID().uuidString;fingerprint=nil;saved=nil;error=nil}
+            refresh()
+        } catch {self.error=error.localizedDescription}
+    }
+    func restoreDeletedReport(_ id:String) {
+        do {
+            guard !blocked,!pendingImport,let repository else {throw ReportError.invalid("Resolve recovery or import before restoring a report.")}
+            adopt(try repository.restoreDeleted(id));refresh()
+        } catch {self.error=error.localizedDescription}
     }
     func restore() {
         do {

@@ -16,7 +16,6 @@ object Schema {
     )
     val settings = listOf(
         Field("camera", "Camera", "Camera / media"),
-        Field("roll", "Camera roll / reel", "Camera / media"),
         Field("mag", "SSD / physical mag", "Camera / media"),
         Field("load", "Load ID", "Camera / media"),
         Field("resolution", "Resolution", "Recording settings"),

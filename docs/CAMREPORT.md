@@ -9,3 +9,9 @@ Report: stable `id`, `revision`, project `values`, camera `defaults`, named `pro
 Fresh exports receive fresh package IDs. Reimporting the same package ID is a no-op. Entries with new IDs are additions. Existing IDs with different contents are conflicts; current files are never overwritten based on timestamps. Different project IDs cannot merge. Omission is never deletion; only explicit tombstones can represent removed records, and competing tombstone edits are conflicts. Full three-way merge and partial scope are intentionally unavailable in this alpha.
 
 Checksums detect accidental corruption; they are not authenticity signatures. On-device names and role labels describe attribution and do not authenticate a person. Opening separately retains the report's project ID but uses a separate local document slot so both divergent versions survive.
+
+## Report management and production mode
+
+`values.productionMode` is `movie` or `tv`; absent or unrecognized values display as Movie. Movie hides Season and Episode from editing and printable reports without clearing their saved values. Camera roll values remain in legacy maps and editable packages but are no longer shown or required by the digital report screens.
+
+Local SQLite schema 2 adds a `deleted` flag to each document slot. Delete Report changes that flag transactionally and preserves both snapshot blobs. Recently Deleted restores the same slot and snapshots. Deletion rejects a stale confirmation, updates active selection atomically, and leaves exported files unchanged. Deleting the last active report clears the active slot and opens an unsaved blank workspace. Legacy snapshot migration recognizes deleted slots and does not reimport them. This local schema change does not change portable `.camreport` schema 1.

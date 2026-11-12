@@ -19,7 +19,7 @@ final class ReportOnlyTests: XCTestCase {
         for removed in ["Footage", "DesktopMedia", "NamingSettingsView", "Naming.preview", "copyTemplate", "Saved footage presets"] {
             XCTAssertFalse(workspace.contains(removed), "Removed workflow returned: \(removed)")
         }
-        XCTAssertTrue(workspace.contains("ForEach(Schema.project)"), "Project metadata must not depend on a retired naming preset")
+        XCTAssertTrue(workspace.contains("ForEach(store.report.projectFields)"), "Project metadata follows the report production mode")
         let updates = try String(contentsOf: sources.appendingPathComponent("DesktopUpdates.swift"))
         XCTAssertFalse(updates.contains("desktop-media"))
         XCTAssertFalse(updates.contains("DesktopUpdateMediaLease"))

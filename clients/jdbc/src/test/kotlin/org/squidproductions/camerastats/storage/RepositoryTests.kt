@@ -26,6 +26,21 @@ class RepositoryTests {
     @Test fun storageFullPreservesReport() {
         val path=root().resolve("reports.sqlite3");val driver=JdbcDriver(path);Repository(driver).use { r -> val slot=identity();val initial=demo();val hash=r.save(slot,initial,"Test",null);val pages=(driver.query("PRAGMA page_count").single().single() as Number).toInt();driver.query("PRAGMA max_page_count=$pages");val large=initial.copy(values=initial.values+("large" to "offline day ".repeat(500000)));assertFails {r.save(slot,large,"Test",hash)};assertEquals(initial,r.load(slot).report) }
     }
+    @Test fun deletedReportsRestoreExactSnapshotsAndRejectStaleWriters() {
+        val path=root().resolve("reports.sqlite3");val slot=identity();val report=demo();val changed=report.next("8B","Test")
+        Repository(JdbcDriver(path)).use {repo ->
+            val old=repo.save(slot,report,"Test",null);val latest=repo.save(slot,changed,"Test",old)
+            assertFails {repo.delete(slot,old)};assertEquals(changed,repo.load(slot).report)
+            assertNull(repo.delete(slot,latest));assertNull(repo.active());assertTrue(repo.list().isEmpty());assertEquals(slot,repo.list(true).single().slot)
+            assertFails {repo.save(slot,changed,"Stale",latest)}
+        }
+        Repository(JdbcDriver(path)).use {repo ->assertEquals(changed,repo.restoreDeleted(slot).report);assertEquals(report,repo.load(slot,true).report);assertEquals(slot,repo.active());assertTrue(repo.list(true).isEmpty())}
+    }
+    @Test fun failedDeleteCommitRetainsReportAndActiveSelection() {
+        val path=root().resolve("reports.sqlite3");val driver=JdbcDriver(path);var fail=false
+        val interrupted=object:SqlDriver by driver {override fun execute(sql:String,args:List<Any?>) {if(fail && sql=="COMMIT") throw ReportException("Interrupted delete");driver.execute(sql,args)}}
+        Repository(interrupted).use {repo ->val slot=identity();val report=demo();val hash=repo.save(slot,report,"Test",null);fail=true;assertFails {repo.delete(slot,hash)};fail=false;assertEquals(report,repo.load(slot).report);assertEquals(slot,repo.active());assertTrue(repo.list(true).isEmpty())}
+    }
     @Test fun invalidSlotAndFutureSchemaPreserveExistingDatabase() {
         val path=root().resolve("reports.sqlite3");Repository(JdbcDriver(path)).use {r -> assertFails {r.save("../escape",demo(),"Test",null)} }
         JdbcDriver(path).use {it.execute("PRAGMA user_version=99")};assertFails {Repository(JdbcDriver(path))};JdbcDriver(path).use { assertEquals(99,(it.query("PRAGMA user_version").single().single() as Number).toInt()) }

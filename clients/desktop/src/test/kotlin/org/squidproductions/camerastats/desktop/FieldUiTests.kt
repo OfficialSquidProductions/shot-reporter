@@ -16,6 +16,31 @@ import org.squidproductions.camerastats.ui.*
 
 class FieldUiTests {
     @get:Rule val ui=createComposeRule()
+    @Test fun productionModeAndRecoverableReportDeletion() {
+        val root=Files.createTempDirectory("camera-management-ui");val repo=Repository(JdbcDriver(root.resolve("reports.sqlite3")));val state=AppState(repo,DesktopGateway(root))
+        try {
+            state.open(legacyReportFixture());val original=state.report
+            ui.setContent {FieldApp(state)}
+            ui.onNodeWithText("Season",substring=false).assertDoesNotExist()
+            ui.onNodeWithText("Settings").performClick()
+            ui.onNodeWithText("Movie",substring=false).performScrollTo().performClick()
+            ui.onNodeWithText("TV",substring=false).performClick()
+            ui.onNodeWithText("Today",substring=false).performClick()
+            ui.onNodeWithText("Season",substring=false).performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("Settings").performClick()
+            ui.onNodeWithText("TV",substring=false).performScrollTo().performClick()
+            ui.onNodeWithText("Movie",substring=false).performClick()
+            ui.onNodeWithText("Saves").performClick()
+            ui.onNodeWithText("Delete Report",substring=false).performScrollTo().performClick()
+            ui.onNodeWithText("Cancel",substring=false).performClick()
+            ui.runOnIdle {assertEquals(1,state.documents.size)}
+            ui.onNodeWithText("Delete Report",substring=false).performClick()
+            ui.onAllNodesWithText("Delete Report",substring=false)[1].performClick()
+            ui.runOnIdle {assertTrue(state.documents.isEmpty());assertEquals(1,state.deletedDocuments.size)}
+            ui.onNodeWithText("Restore Report",substring=false).performScrollTo().performClick()
+            ui.runOnIdle {assertEquals(original.entries,state.report.entries);assertEquals(original.defaults,state.report.defaults);assertEquals(original.values["season"],state.report.values["season"]);assertEquals(ProductionMode.MOVIE,state.report.productionMode);assertEquals(1,state.documents.size);assertTrue(state.deletedDocuments.isEmpty())}
+        } finally {repo.close()}
+    }
     @Test fun desktopBlankReportNextTakeAndDraftReview() {
         val root=Files.createTempDirectory("camera-ui-test");val host=DesktopGateway(root);val repo=Repository(JdbcDriver(root.resolve("reports.sqlite3")));val state=AppState(repo,host)
         try {

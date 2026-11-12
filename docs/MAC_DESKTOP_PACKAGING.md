@@ -7,9 +7,9 @@ The native reporting app retains application ID `org.squidproductions.camerastat
 `tools/prepare_macos_desktop_release.py` builds the native Release app or accepts a matching unsigned `--app-input`. It requires no Java runtime or external decoder tools. Output must be a fresh directory outside the checkout.
 
 ```sh
-python3 tools/build_apple.py --distribution direct --version 0.2.0 --build 11
+python3 tools/build_apple.py --distribution direct --version 0.2.0 --build 12
 python3 tools/prepare_macos_desktop_release.py \
-  --version 0.2.0-alpha.8 --build 11 \
+  --version 0.2.0-alpha.9 --build 12 \
   --output /private/new-reporting-candidate
 ```
 

@@ -14,7 +14,7 @@ public final class Repository {
             sqlite3_busy_timeout(db,3000)
             try execute("PRAGMA journal_mode=WAL"); try execute("PRAGMA synchronous=FULL"); try execute("PRAGMA foreign_keys=ON")
             let version = try scalarInt("PRAGMA user_version")
-            guard version <= 1 else {throw ReportError.invalid("Newer local database schema; existing data preserved")}
+            guard version <= 2 else {throw ReportError.invalid("Newer local database schema; existing data preserved")}
             if version == 0 {
                 try execute("BEGIN IMMEDIATE")
                 do {
@@ -22,6 +22,11 @@ public final class Repository {
                     try execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
                     try execute("PRAGMA user_version=1"); try execute("COMMIT")
                 } catch {try? execute("ROLLBACK"); throw error}
+            }
+            if version < 2 {
+                try execute("BEGIN IMMEDIATE")
+                do { try execute("ALTER TABLE documents ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"); try execute("PRAGMA user_version=2"); try execute("COMMIT") }
+                catch { try? execute("ROLLBACK"); throw error }
             }
             guard try scalarText("PRAGMA quick_check") == "ok" else {throw ReportError.invalid("Local database integrity check failed; existing data preserved")}
         } catch {sqlite3_close(db); db = nil; throw error}
@@ -35,9 +40,9 @@ public final class Repository {
     private func scalarInt(_ sql:String) throws ->Int { let s=try statement(sql); defer{sqlite3_finalize(s)}; guard sqlite3_step(s) == SQLITE_ROW else {throw message()}; return Int(sqlite3_column_int(s,0)) }
     private func scalarText(_ sql:String) throws ->String { let s=try statement(sql); defer{sqlite3_finalize(s)}; guard sqlite3_step(s) == SQLITE_ROW, let value=sqlite3_column_text(s,0) else {throw message()}; return String(cString:value) }
     private func validate(_ slot:String) throws {guard UUID(uuidString:slot) != nil else {throw ReportError.invalid("Invalid local document slot")}}
-    private func bytes(_ slot:String,previous:Bool=false) throws ->Data? {
+    private func bytes(_ slot:String,previous:Bool=false,includeDeleted:Bool=false) throws ->Data? {
         try validate(slot)
-        let s=try statement("SELECT \(previous ? "previous" : "current") FROM documents WHERE slot=?"); defer{sqlite3_finalize(s)}; try bind(s,1,slot)
+        let s=try statement("SELECT \(previous ? "previous" : "current") FROM documents WHERE slot=? \(includeDeleted ? "" : "AND deleted=0")"); defer{sqlite3_finalize(s)}; try bind(s,1,slot)
         let status=sqlite3_step(s); if status == SQLITE_DONE {return nil}; guard status == SQLITE_ROW else {throw message()}
         if sqlite3_column_type(s,0) == SQLITE_NULL {return nil}
         let size=Int(sqlite3_column_bytes(s,0)); guard size <= Exchange.limit, let b=sqlite3_column_blob(s,0) else {throw ReportError.invalid("Invalid local snapshot size")}; return Data(bytes:b,count:size)
@@ -46,9 +51,38 @@ public final class Repository {
         let s=try statement("SELECT value FROM metadata WHERE key='active'"); defer{sqlite3_finalize(s)}
         let status=sqlite3_step(s); if status == SQLITE_DONE {return nil}; guard status == SQLITE_ROW, let text=sqlite3_column_text(s,0) else {throw message()}; return String(cString:text)
     }
-    public func list() throws ->[Document] {
-        let s=try statement("SELECT slot,title,revision FROM documents ORDER BY title,slot"); defer{sqlite3_finalize(s)}; var result:[Document]=[]
+    public func list(deleted:Bool=false) throws ->[Document] {
+        let s=try statement("SELECT slot,title,revision FROM documents WHERE deleted=\(deleted ? 1 : 0) ORDER BY title,slot"); defer{sqlite3_finalize(s)}; var result:[Document]=[]
         while true {let status=sqlite3_step(s); if status == SQLITE_DONE {break}; guard status == SQLITE_ROW, let slot=sqlite3_column_text(s,0), let title=sqlite3_column_text(s,1) else {throw message()}; result.append(Document(slot:String(cString:slot),title:String(cString:title),revision:Int(sqlite3_column_int64(s,2))))}; return result
+    }
+    public func knownSlots() throws ->Set<String> { Set(try list().map(\.slot) + list(deleted:true).map(\.slot)) }
+    public func delete(_ slot:String,expectedFingerprint:String) throws ->Loaded? {
+        try delete(slot,expectedFingerprint:expectedFingerprint,failBeforeCommit:false)
+    }
+    func delete(_ slot:String,expectedFingerprint:String,failBeforeCommit:Bool) throws ->Loaded? {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let current = try load(slot)
+            guard current.fingerprint == expectedFingerprint else { throw ReportError.invalid("This report changed. Reopen it and review it before deleting; nothing was deleted.") }
+            let s = try statement("UPDATE documents SET deleted=1 WHERE slot=?"); defer {sqlite3_finalize(s)}
+            try bind(s,1,slot); guard sqlite3_step(s) == SQLITE_DONE else {throw message()}
+            if try active() == slot {
+                if let next = try list().first { _ = try select(next.slot) }
+                else { try execute("DELETE FROM metadata WHERE key='active'") }
+            }
+            let next = try active().map {try load($0)}
+            if failBeforeCommit { throw ReportError.invalid("Injected interrupted delete") }
+            try execute("COMMIT"); return next
+        } catch {try? execute("ROLLBACK"); throw error}
+    }
+    public func restoreDeleted(_ slot:String) throws ->Loaded {
+        try validate(slot); try execute("BEGIN IMMEDIATE")
+        do {
+            guard try list(deleted:true).contains(where:{$0.slot == slot}) else {throw ReportError.invalid("This report is no longer in Recently Deleted.")}
+            let s = try statement("UPDATE documents SET deleted=0 WHERE slot=?"); defer {sqlite3_finalize(s)}
+            try bind(s,1,slot); guard sqlite3_step(s) == SQLITE_DONE else {throw message()}
+            let loaded = try select(slot); try execute("COMMIT"); return loaded
+        } catch {try? execute("ROLLBACK"); throw error}
     }
     public func load(_ slot:String,previous:Bool=false) throws ->Loaded {
         guard let data=try bytes(slot,previous:previous) else {throw ReportError.invalid("Local snapshot not found")}
@@ -68,6 +102,7 @@ public final class Repository {
         try execute("BEGIN IMMEDIATE")
         do {
             let current=try bytes(slot)
+            if current == nil, try bytes(slot,includeDeleted:true) != nil {throw ReportError.invalid("This report is in Recently Deleted. Restore it before editing; no changes were accepted.")}
             if let current { _=try Exchange.read(current); guard expectedFingerprint == Exchange.digest(current) else {throw ReportError.invalid("This local report changed in another app instance. Reopen it before saving; no changes were accepted.")} }
             else if expectedFingerprint != nil {throw ReportError.invalid("Local document disappeared; no changes were accepted")}
             let s=try statement("INSERT INTO documents(slot,title,revision,current,previous) VALUES(?,?,?,?,NULL) ON CONFLICT(slot) DO UPDATE SET title=excluded.title,revision=excluded.revision,previous=documents.current,current=excluded.current")

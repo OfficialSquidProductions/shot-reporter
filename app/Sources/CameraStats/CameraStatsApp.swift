@@ -77,6 +77,7 @@ struct Workspace: View {
     @State private var showRecordingSettings = true
     @State private var pdfPreview: PDFReview?
     @State private var showingSupport=false
+    @State private var reportToDelete: Store.DeletionRequest?
     private var diagnostics:DiagnosticsCenter {DiagnosticsCenter.shared}
     var scheme:ColorScheme? { theme == "Dark" ? .dark : theme == "Light" ? .light : nil }
     var body: some View {
@@ -125,6 +126,10 @@ struct Workspace: View {
         .sheet(isPresented:$showingSupport) {BugReportView(diagnostics:diagnostics)}
         .sheet(item:$pending) { item in importSheet(item) }
         .onChange(of:pending != nil) {_,value in store.pendingImport=value}
+        .confirmationDialog("Delete report?",isPresented:Binding(get:{reportToDelete != nil},set:{if !$0 {reportToDelete=nil}}),titleVisibility:.visible,presenting:reportToDelete) { request in
+            Button("Delete Report",role:.destructive) {store.deleteReport(request);reportToDelete=nil}
+            Button("Cancel",role:.cancel) {reportToDelete=nil}
+        } message: { request in Text("Move \(request.title) to Recently Deleted? You can restore it from Saves. Exported files are kept.") }
         .sheet(item:$pdfPreview) { item in PDFReviewScreen(item:item) }
         .alert("Shot Reporter",isPresented:Binding(get:{store.error != nil},set:{if !$0 { store.error = nil }})) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
@@ -170,11 +175,17 @@ struct Workspace: View {
             Section("Production profile") {
                 Picker("Production profile",selection:Binding(get:{store.report.profile},set:{v in store.change("Changed profile; all values retained"){$0.profile = v}})) { ForEach(Schema.profiles,id:\.self) { Text($0) } }
             }
-            Section("Project / crew · complete report") { ForEach(Schema.project) { f in field(f,projectBinding(f.id)) } }
+            Section("Project / crew · complete report") { ForEach(store.report.projectFields) { f in field(f,projectBinding(f.id)) } }
         }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
     }
     var settings: some View {
         Form {
+            Section("Production mode") {
+                Picker("Production mode",selection:Binding(get:{store.report.productionMode},set:{mode in store.change("Changed production mode; all values retained") {$0.productionMode=mode}})) {
+                    ForEach(ProductionMode.allCases) {mode in Text(mode.title).tag(mode)}
+                }.pickerStyle(.segmented)
+                Text("Movie hides Season and Episode. TV shows them in Today and reports. Hidden values are kept for this report.").font(.caption)
+            }
             Section("Appearance") {
                 Picker("Appearance",selection:$theme) { ForEach(["System","Light","Dark"],id:\.self) { Text($0) } }
             }
@@ -209,16 +220,16 @@ struct Workspace: View {
     var log: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:18) {
-                HStack { Label("Camera \(store.report.defaults["camera",default:"A"])",systemImage:"camera").font(.title2.bold()); Spacer(); Text(store.report.defaults["roll",default:""]).monospaced() }
+                HStack { Label("Camera \(store.report.defaults["camera",default:"A"])",systemImage:"camera").font(.title2.bold()); Spacer() }
                 TextField("Scene / setup (e.g. 12B)",text:$scene).textFieldStyle(.roundedBorder).font(.title2).accessibilityLabel("Scene for next take")
                 HStack {
                     Button { store.change("Next take") { r in selected = r.next(scene:scene,device:store.device) } } label: { Label("Next take",systemImage:"plus").frame(maxWidth:.infinity,minHeight:36) }.buttonStyle(.borderedProminent).disabled(scene.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || store.blocked)
                     Button("New setup") { scene = ""; selected = nil }
-                    Button("Reload") { store.change("New media load") { $0.defaults["load"] = UUID().uuidString; $0.defaults["mag"] = ""; $0.defaults["roll"] = "" } }
+                    Button("Reload") { store.change("New media load") { $0.defaults["load"] = UUID().uuidString; $0.defaults["mag"] = "" } }
                 }
-                Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new roll and mag here before logging.").font(.caption).foregroundStyle(.secondary)
+                Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new SSD / mag here before logging.").font(.caption).foregroundStyle(.secondary)
                 recordingSettings
-                Picker("Take",selection:$selected) { Text("Choose take").tag(String?.none); ForEach(store.report.active.reversed()) { e in Text("\(e.values["scene",default:"?"]) / \(e.values["take",default:"?"]) · \(e.values["camera",default:""]) \(e.values["roll",default:""])").tag(Optional(e.id)) } }
+                Picker("Take",selection:$selected) { Text("Choose take").tag(String?.none); ForEach(store.report.active.reversed()) { e in Text("\(e.values["scene",default:"?"]) / \(e.values["take",default:"?"]) · \(e.values["camera",default:""])").tag(Optional(e.id)) } }
                 if let id = selected, let e = store.report.entries.first(where:{$0.id == id && !$0.deleted}) { takeEditor(e) } else { ContentUnavailableView("Ready for the next slate",systemImage:"camera",description:Text("Enter the scene, then add a take. All logging works offline.")) }
             }.padding(20).frame(maxWidth:900,alignment:.leading).frame(maxWidth:.infinity)
         }
@@ -246,10 +257,10 @@ struct Workspace: View {
                 ForEach(Array(store.report.missing.enumerated()),id:\.offset) { _,m in Text(m).font(.caption) }
             }
             Section("Find takes") {
-                TextField("Search scene, roll, notes, camera",text:$search).textFieldStyle(.roundedBorder)
+                TextField("Search scene, notes, camera",text:$search).textFieldStyle(.roundedBorder)
                 Toggle("Circled takes only",isOn:$circleOnly)
                 ForEach(store.report.active.filter{e in (!circleOnly || e.flags.contains("Circle")) && (search.isEmpty || (e.values.values.joined(separator:" ")+e.flags.joined(separator:" ")).localizedCaseInsensitiveContains(search))}) { e in
-                    Button { selected = e.id; destination = .log; tab = .log } label: { VStack(alignment:.leading) { Text("\(e.values["scene",default:"?"]) / \(e.values["take",default:"?"]) · Camera \(e.values["camera",default:""]) · \(e.values["roll",default:""])").font(.headline); Text(e.flags.sorted().joined(separator:" · ") + (e.reviewed ? " · Reviewed" : " · Review pending")).font(.caption); Text(e.values["remarks",default:""]).font(.caption).foregroundStyle(.secondary) } }
+                    Button { selected = e.id; destination = .log; tab = .log } label: { VStack(alignment:.leading) { Text("\(e.values["scene",default:"?"]) / \(e.values["take",default:"?"]) · Camera \(e.values["camera",default:""])").font(.headline); Text(e.flags.sorted().joined(separator:" · ") + (e.reviewed ? " · Reviewed" : " · Review pending")).font(.caption); Text(e.values["remarks",default:""]).font(.caption).foregroundStyle(.secondary) } }
                 }
             }
             Section("Recovery") { ForEach(store.report.entries.filter(\.deleted)) { e in Button("Restore \(e.values["scene",default:""]) / \(e.values["take",default:""])") { store.change("Restored deleted take") { r in if let i = r.entries.firstIndex(where:{$0.id == e.id}) {r.entries[i].deleted = false} } } } }
@@ -257,6 +268,24 @@ struct Workspace: View {
     }
     var saves: some View {
         Form {
+            Section("Saved reports") {
+                if store.documents.isEmpty { Text("No saved reports. Create a blank report in Today.").foregroundStyle(.secondary) }
+                ForEach(store.documents,id:\.0) { doc in
+                    HStack {
+                        Button {store.select(doc.0)} label:{Label(doc.1,systemImage:doc.0 == store.slot ? "doc.text.fill" : "doc.text").frame(maxWidth:.infinity,alignment:.leading)}
+                        Button(role:.destructive) {do {reportToDelete=try store.deletionRequest(for:doc.0)} catch {store.error=error.localizedDescription}} label:{Label("Delete Report",systemImage:"trash")}
+                            .disabled(store.blocked || store.pendingImport)
+                    }
+                }
+            }
+            if !store.deletedDocuments.isEmpty {
+                Section("Recently Deleted") {
+                    Text("Deleted reports stay here until you restore them. Their saved takes and previous snapshots are kept.").font(.caption)
+                    ForEach(store.deletedDocuments,id:\.0) {doc in
+                        HStack {Text(doc.1);Spacer();Button("Restore Report") {store.restoreDeletedReport(doc.0)}.disabled(store.blocked || store.pendingImport)}
+                    }
+                }
+            }
             Section("Report handoff") {
                 status; Text("Device: \(store.device) · report revision \(store.report.revision) · last file export \(store.lastExportedRevision.map{ "r\($0)" } ?? "none")").font(.caption)
                 Button("Save As .camreport") { export(.camreport,"camreport") {try Exchange.export(store.report,device:store.device)} }

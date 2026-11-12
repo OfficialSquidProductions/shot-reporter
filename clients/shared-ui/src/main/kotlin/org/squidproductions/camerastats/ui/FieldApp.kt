@@ -35,6 +35,8 @@ class AppState(private val repository:Repository?,val platform:PlatformGateway) 
     var report by mutableStateOf(Report());private set
     var slot by mutableStateOf(identity());private set
     var documents by mutableStateOf(emptyList<Document>());private set
+    var deletedDocuments by mutableStateOf(emptyList<Document>());private set
+    data class DeletionRequest(val slot:String,val title:String,val fingerprint:String)
     var selected by mutableStateOf<String?>(null)
     var error by mutableStateOf<String?>(null)
     var status by mutableStateOf("Create a local report to begin");private set
@@ -47,14 +49,14 @@ class AppState(private val repository:Repository?,val platform:PlatformGateway) 
         catch(e:Exception) {blocked=true;error="Existing reports could not be read. Their bytes were preserved. ${e.message}"}
     }
     private fun adopt(loaded:Loaded) {slot=loaded.slot;report=loaded.report;fingerprint=loaded.fingerprint;status="Saved on this device";blocked=false;selected=report.active.firstOrNull { "Circle" in it.flags }?.id ?: report.active.lastOrNull()?.id}
-    private fun refresh() {documents=repository?.list().orEmpty()}
+    private fun refresh() {documents=repository?.list().orEmpty();deletedDocuments=repository?.list(true).orEmpty()}
     private fun rememberDocument() {documents=(documents.filterNot {it.slot==slot}+Document(slot,report.values["title"] ?: "Untitled",report.revision)).sortedWith(compareBy({it.title},{it.slot}))}
     fun fail(e:Exception) {error=e.message ?: "This operation could not be completed; existing report preserved."}
     fun attempt(action:()->Unit) {try {action()} catch(e:Exception) {fail(e)}}
     fun change(summary:String,action:(Report)->Report) {
         if(blocked) {error="Local recovery is required before changes can be saved.";return}
         try {
-            val proposed=action(report);val next=if(proposed.revision==report.revision) proposed.record(summary,platform.label) else proposed
+            val proposed=action(report);if(proposed==report) return;val next=if(proposed.revision==report.revision) proposed.record(summary,platform.label) else proposed
             val hash=repository!!.save(slot,next,platform.label,fingerprint)
             report=next;fingerprint=hash;status="Saved on this device";rememberDocument()
         } catch(e:Exception) {error="Save failed; this change was not accepted. ${e.message.orEmpty()}"}
@@ -64,6 +66,20 @@ class AppState(private val repository:Repository?,val platform:PlatformGateway) 
         adopt(Loaded(newSlot,incoming,hash));rememberDocument()
     }
     fun select(id:String)=attempt {adopt(repository!!.select(id))}
+    fun deletionRequest(id:String):DeletionRequest {
+        require(!blocked && pending==null) {"Resolve recovery or import before deleting a report."}
+        val loaded=repository!!.load(id);return DeletionRequest(id,loaded.report.values["title"] ?: "Untitled",loaded.fingerprint)
+    }
+    fun deleteReport(request:DeletionRequest)=attempt {
+        require(!blocked && pending==null) {"Resolve recovery or import before deleting a report."}
+        val next=repository!!.delete(request.slot,request.fingerprint)
+        if(next!=null) adopt(next) else {report=Report();slot=identity();fingerprint=null;selected=null;status="Create a local report to begin"}
+        refresh()
+    }
+    fun restoreDeletedReport(id:String)=attempt {
+        require(!blocked && pending==null) {"Resolve recovery or import before restoring a report."}
+        adopt(repository!!.restoreDeleted(id));refresh()
+    }
     fun previous()=attempt {open(repository!!.load(slot,true).report)}
     fun next(scene:String) {change("Added take") {it.next(scene,platform.label)};selected=report.active.lastOrNull()?.id}
     fun entry(id:String,summary:String,action:(Entry)->Entry)=change(summary) {r -> r.copy(entries=r.entries.map {if(it.id==id) action(it) else it})}
@@ -83,6 +99,7 @@ private val Green=Color(0xff237b20)
     val palette=if(dark) darkColorScheme(primary=Color(0xff95df8d),secondary=Color(0xff95df8d),secondaryContainer=Color(0xff34452f),onSecondaryContainer=Color(0xffc3efbc),outline=Color(0xff8d7784),outlineVariant=Color(0xff49333f),background=Color(0xff191419),surface=Color(0xff251d23),onSurface=Color(0xfff3eaf0)) else lightColorScheme(primary=Green,secondary=Green,secondaryContainer=Color(0xffdaeed6),onSecondaryContainer=Color(0xff1c4618),background=Color(0xfffaf8f9),surface=Color.White)
     var page by remember {mutableStateOf("Today")};var detail by remember {mutableStateOf(host.preference("detail","Standard"))}
     var documentPicker by remember {mutableStateOf(false)}
+    var reportToDelete by remember {mutableStateOf<AppState.DeletionRequest?>(null)}
     var notices by remember {mutableStateOf<String?>(null)}
     MaterialTheme(colorScheme=palette) {
         Surface(Modifier.fillMaxSize(),color=palette.background) {
@@ -122,9 +139,13 @@ private val Green=Color(0xff237b20)
                                         Section("Production profile") {
                                             Choice("Production profile",state.report.profile,Schema.profiles) {v -> state.change("Changed profile; all values retained") {it.copy(profile=v)}}
                                         }
-                                        Section("Project / crew · complete report") {Fields(Schema.project,state.report.values) {k,v ->state.change("Edited project field") {it.copy(values=it.values+(k to v))}} }
+                                        Section("Project / crew · complete report") {Fields(state.report.projectFields,state.report.values) {k,v ->state.change("Edited project field") {it.copy(values=it.values+(k to v))}} }
                                     }
                                     "Settings" -> {
+                                        Section("Production mode") {
+                                            Choice("Production mode",state.report.productionMode.label,listOf("Movie","TV")) {v ->state.change("Changed production mode; all values retained") {it.withProductionMode(if(v=="TV") ProductionMode.TV else ProductionMode.MOVIE)}}
+                                            Text("Movie hides Season and Episode. TV shows them in Today and reports. Hidden values are kept for this report.")
+                                        }
                                         Section("Appearance") {
                                             Choice("Appearance",theme,listOf("System","Light","Dark")) {v -> theme=v;host.preference("theme",v,true)}
                                         }
@@ -137,6 +158,20 @@ private val Green=Color(0xff237b20)
                                     "Log" -> LogScreen(state,detail,{v ->detail=v;host.preference("detail",v,true)})
                                     "Review" -> ReviewScreen(state)
                                     "Saves" -> {
+                                        Section("Saved reports") {
+                                            if(state.documents.isEmpty()) Text("No saved reports. Create a blank report in Today.")
+                                            state.documents.forEach {doc ->Row(verticalAlignment=Alignment.CenterVertically) {
+                                                TextButton(onClick={state.select(doc.slot)},modifier=Modifier.weight(1f)) {Text("${doc.title} · r${doc.revision}")}
+                                                TextButton(onClick={state.attempt {reportToDelete=state.deletionRequest(doc.slot)}},enabled=!state.blocked && state.pending==null) {Text("Delete Report")}
+                                            }}
+                                        }
+                                        if(state.deletedDocuments.isNotEmpty()) Section("Recently Deleted") {
+                                            Text("Deleted reports can be restored with their takes and previous snapshots.")
+                                            state.deletedDocuments.forEach {doc ->Row(verticalAlignment=Alignment.CenterVertically) {
+                                                Text("${doc.title} · r${doc.revision}",Modifier.weight(1f))
+                                                TextButton(onClick={state.restoreDeletedReport(doc.slot)},enabled=!state.blocked && state.pending==null) {Text("Restore Report")}
+                                            }}
+                                        }
                                         Section("Report handoff") {
                                             Text(state.status);state.lastExport?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
                                             Button(onClick={state.export("camreport")}) {Text("Save As .camreport")}
@@ -162,6 +197,7 @@ private val Green=Color(0xff237b20)
                 }
             }
         }
+        reportToDelete?.let {request ->AlertDialog(onDismissRequest={reportToDelete=null},title={Text("Delete report?")},text={Text("Move ${request.title} to Recently Deleted? You can restore it from Saves. Exported files are kept.")},confirmButton={TextButton(onClick={state.deleteReport(request);reportToDelete=null}) {Text("Delete Report")}},dismissButton={TextButton(onClick={reportToDelete=null}) {Text("Cancel")}})}
         if(documentPicker) AlertDialog(onDismissRequest={documentPicker=false},title={Text("Open local report")},text={LazyColumn(Modifier.heightIn(max=400.dp)) {items(state.documents,key={it.slot}) {doc -> TextButton(onClick={state.select(doc.slot);documentPicker=false}) {Text("${doc.title} · r${doc.revision}")} }}},confirmButton={TextButton(onClick={documentPicker=false}) {Text("Done")}})
         state.pending?.let {incoming ->
             val preview=runCatching {Exchange.preview(state.report,incoming)}
@@ -223,12 +259,12 @@ private val Green=Color(0xff237b20)
 @Composable private fun LogScreen(state:AppState,detail:String,changeDetail:(String)->Unit) {
     var showSettings by remember(state.slot) {mutableStateOf(true)}
     var scene by remember(state.slot) {mutableStateOf("")};var picking by remember {mutableStateOf(false)};var search by remember {mutableStateOf("")};var circles by remember {mutableStateOf(false)}
-    Section("Camera ${state.report.defaults["camera"].orEmpty()} · ${state.report.defaults["roll"].orEmpty()}") {
+    Section("Camera ${state.report.defaults["camera"].orEmpty()}") {
         Editor("Scene for next take",scene) {scene=it}
         Button(onClick={state.next(scene);if(state.selected!=null) showSettings=false},enabled=scene.isNotBlank()&&!state.blocked,modifier=Modifier.fillMaxWidth()) {Text("Next take")}
-        Row {TextButton(onClick={scene="";state.selected=null;showSettings=true}) {Text("New setup")};TextButton(onClick={state.change("Reload: fresh load identity") {it.copy(defaults=it.defaults+mapOf("load" to identity(),"roll" to "","mag" to ""))}}) {Text("Reload")}}
-        Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new roll and mag here before logging.",style=MaterialTheme.typography.bodySmall)
-        OutlinedButton(onClick={picking=true}) {Text(state.report.entries.firstOrNull {it.id==state.selected && !it.deleted}?.let {"${it.values["scene"]} / ${it.values["take"]} · ${it.values["camera"]} ${it.values["roll"]}"} ?: "Choose take")}
+        Row {TextButton(onClick={scene="";state.selected=null;showSettings=true}) {Text("New setup")};TextButton(onClick={state.change("Reload: fresh load identity") {it.copy(defaults=it.defaults+mapOf("load" to identity(),"mag" to ""))}}) {Text("Reload")}}
+        Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new SSD / mag here before logging.",style=MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick={picking=true}) {Text(state.report.entries.firstOrNull {it.id==state.selected && !it.deleted}?.let {"${it.values["scene"]} / ${it.values["take"]} · ${it.values["camera"]}"} ?: "Choose take")}
     }
     Section("Camera & recording · next take") {
         Text("Settings carry forward until you edit them or return to app defaults. Earlier takes keep their recorded values.",style=MaterialTheme.typography.bodySmall)
@@ -249,7 +285,7 @@ private val Green=Color(0xff237b20)
         TextButton(onClick={state.entry(entry.id,"Removed take (recoverable)") {it.copy(deleted=true)};state.selected=null}) {Text("Remove take (recoverable)")}
         Text(state.status,style=MaterialTheme.typography.labelSmall)
     }
-    if(picking) AlertDialog(onDismissRequest={picking=false},title={Text("Choose take")},text={Column {Editor("Search takes",search) {search=it};Check("Circled only",circles) {circles=it};LazyColumn(Modifier.heightIn(max=400.dp)) {items(state.report.active.asReversed().filter {(!circles||"Circle" in it.flags) && (search.isBlank()||it.values.values.any {v ->v.contains(search,true)})},key={it.id}) {e ->TextButton(onClick={state.selected=e.id;picking=false}) {Text("${e.values["scene"]} / ${e.values["take"]} · ${e.values["camera"]} ${e.values["roll"]}${if("Circle" in e.flags) " · Circle" else ""}")} }}}},confirmButton={TextButton(onClick={picking=false}) {Text("Done")}})
+    if(picking) AlertDialog(onDismissRequest={picking=false},title={Text("Choose take")},text={Column {Editor("Search takes",search) {search=it};Check("Circled only",circles) {circles=it};LazyColumn(Modifier.heightIn(max=400.dp)) {items(state.report.active.asReversed().filter {(!circles||"Circle" in it.flags) && (search.isBlank()||it.values.values.any {v ->v.contains(search,true)})},key={it.id}) {e ->TextButton(onClick={state.selected=e.id;picking=false}) {Text("${e.values["scene"]} / ${e.values["take"]} · ${e.values["camera"]}${if("Circle" in e.flags) " · Circle" else ""}")} }}}},confirmButton={TextButton(onClick={picking=false}) {Text("Done")}})
 }
 @Composable private fun ReviewScreen(state:AppState) {
     Section("Complete report review") {

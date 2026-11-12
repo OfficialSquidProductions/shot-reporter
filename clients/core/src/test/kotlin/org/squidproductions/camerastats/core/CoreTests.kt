@@ -7,6 +7,14 @@ import kotlinx.serialization.json.*
 
 class CoreTests {
     private fun fixture(name:String="swift-demo")=File(System.getProperty("fixtures"),"$name.camreport").readBytes()
+    @Test fun movieModeHidesTVMetadataWithoutErasingDigitalReportData() {
+        val report=Report(values=mapOf("season" to "2","episode" to "7"),defaults=Report().defaults+("roll" to "A009"))
+        assertEquals(ProductionMode.MOVIE,report.productionMode);assertFalse(report.projectFields.any {it.id=="season" || it.id=="episode"});assertFalse(Schema.settings.any {it.id=="roll"});assertNull(Report().defaults["roll"])
+        assertFalse(Reports.html(report).contains("season:"));assertFalse(Reports.printable(report).any {it.startsWith("Season:")})
+        val tv=report.withProductionMode(ProductionMode.TV);assertTrue(Reports.printable(tv).any {it=="Season: 2"})
+        val restored=Exchange.read(Exchange.export(tv.withProductionMode(ProductionMode.MOVIE),"Test")).report
+        assertEquals("2",restored.values["season"]);assertEquals("7",restored.values["episode"]);assertEquals("A009",restored.defaults["roll"])
+    }
     @Test fun swiftGoldenRoundtripAndKotlinExport() {
         val original=Exchange.read(fixture()).report
         assertEquals(3,original.active.size);assertEquals(listOf("MOS","Tail slate"),original.entries.first().flags)

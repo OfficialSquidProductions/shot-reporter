@@ -13,16 +13,22 @@ class ReportException(message: String) : IllegalArgumentException(message)
     val reviewed: Boolean = false, val deleted: Boolean = false, val created: Double = timestamp()
 )
 @Serializable data class Change(val date: Double = timestamp(), val device: String, val summary: String)
+enum class ProductionMode(val label:String) { MOVIE("Movie"), TV("TV") }
+
 @Serializable data class Report(
     val id: String = identity(), val revision: Long = 0,
     val values: Map<String,String> = mapOf("date" to Instant.now().toString().take(10)),
-    val defaults: Map<String,String> = mapOf("camera" to "A", "roll" to "A001", "load" to identity(), "playbackRate" to "24000/1001", "sensorRate" to "24000/1001"),
+    val defaults: Map<String,String> = mapOf("camera" to "A", "load" to identity(), "playbackRate" to "24000/1001", "sensorRate" to "24000/1001"),
     val profile: String = Schema.profiles.first(), val positions: List<String> = listOf("All Duties"),
     val entries: List<Entry> = emptyList(), val history: List<Change> = emptyList(),
     val importedPackages: List<String> = emptyList(),
     // Opaque schema-1 compatibility data. Retained on import/export, never interpreted.
     val namingTemplate: String = "{project}_SC{scene}_TK{take}_CAM-{camera}"
 ) {
+    val productionMode:ProductionMode get() = if(values["productionMode"]=="tv") ProductionMode.TV else ProductionMode.MOVIE
+    fun withProductionMode(mode:ProductionMode):Report = copy(values=values+("productionMode" to if(mode==ProductionMode.TV) "tv" else "movie"))
+    val projectFields:List<Field> get() = Schema.project.filter {productionMode==ProductionMode.TV || it.id !in setOf("season","episode")}
+    val visibleProjectValues:Map<String,String> get() = values.filterKeys {it!="productionMode" && (productionMode==ProductionMode.TV || it !in setOf("season","episode"))}
     val active: List<Entry> get() = entries.filterNot { it.deleted }
     fun record(summary: String, device: String): Report {
         require(revision<Long.MAX_VALUE) { "Report revision exceeds the supported range; original preserved." }
