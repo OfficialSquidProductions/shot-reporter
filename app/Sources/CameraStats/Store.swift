@@ -9,6 +9,8 @@ import CameraStatsCore
     var slot = UUID().uuidString
     var documents: [(String,String)] = []
     var deletedDocuments: [(String,String)] = []
+    struct TrashRequest:Identifiable {let id=UUID();let items:[Repository.TrashItem]}
+    var trashNotice:String?
     struct DeletionRequest: Identifiable { let id:String; let title:String; let fingerprint:String }
     var blocked = false
     var pendingImport = false
@@ -18,11 +20,11 @@ import CameraStatsCore
     private let preferences:UserDefaults
     private var repository:Repository?
     private var fingerprint:String?
-    init(root:URL? = nil,preferences:UserDefaults = .standard) {
+    init(root:URL? = nil,preferences:UserDefaults = .standard,now:@escaping ()->Date = Date.init) {
         self.preferences = preferences; device = ProcessInfo.processInfo.hostName
         self.root = root ?? FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("org.squidproductions.camerastats",isDirectory:true)
         do {
-            let repo = try Repository(url:self.root.appendingPathComponent("reports.sqlite3")); repository = repo
+            let repo = try Repository(url:self.root.appendingPathComponent("reports.sqlite3"),now:now); repository = repo
             // One-time, idempotent migration. Legacy snapshots stay untouched as recovery files.
             let known = try repo.knownSlots()
             for url in try FileManager.default.contentsOfDirectory(at:self.root,includingPropertiesForKeys:nil) where url.pathExtension == "camreport" && !url.lastPathComponent.contains("previous") {
@@ -31,7 +33,7 @@ import CameraStatsCore
             }
             if let legacyActive = preferences.string(forKey:"activeReport"), (try repo.list()).contains(where:{$0.slot == legacyActive}) { _=try repo.select(legacyActive); preferences.removeObject(forKey:"activeReport") }
             if let selected = try repo.active() { let loaded=try repo.load(selected); slot=selected; report=loaded.report; fingerprint=loaded.fingerprint; saved=Date() }
-            refresh()
+            refresh();cleanupExpiredTrash()
         } catch { self.error = "Local report could not be read. Its bytes were preserved. Export/recover it before creating a new report. \(error.localizedDescription)"; blocked = true }
     }
     func refresh() {
@@ -78,6 +80,21 @@ import CameraStatsCore
             guard !blocked,!pendingImport,let repository else {throw ReportError.invalid("Resolve recovery or import before restoring a report.")}
             adopt(try repository.restoreDeleted(id));refresh()
         } catch {self.error=error.localizedDescription}
+    }
+    func trashRequest() throws ->TrashRequest {
+        guard !blocked,!pendingImport,let repository else {throw ReportError.invalid("Resolve recovery or import before clearing trash.")}
+        return TrashRequest(items:try repository.trash())
+    }
+    func clearTrash(_ request:TrashRequest) {
+        do {
+            guard !blocked,!pendingImport,let repository else {throw ReportError.invalid("Resolve recovery or import before clearing trash.")}
+            let count=try repository.clearTrash(expected:request.items);refresh();trashNotice="Permanently removed \(count) deleted report(s) from this device."
+        } catch {self.error=error.localizedDescription}
+    }
+    func cleanupExpiredTrash() {
+        guard !blocked,!pendingImport,let repository else {return}
+        do {let count=try repository.cleanupExpiredTrash();if count > 0 {refresh();trashNotice="Automatically removed \(count) report(s) deleted at least 14 days ago."}}
+        catch {self.error="Trash cleanup stopped; saved reports are preserved. \(error.localizedDescription)"}
     }
     func restore() {
         do {

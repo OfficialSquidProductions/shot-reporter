@@ -10,12 +10,14 @@ data class Document(val slot:String,val title:String,val revision:Long)
 data class Loaded(val slot:String,val report:Report,val fingerprint:String)
 
 /** One database per app, never a shared drive. A failed or stale save leaves the prior snapshot intact. */
-class Repository(private val db:SqlDriver):Closeable {
+data class TrashItem(val slot:String,val title:String,val deletedAt:Double,val fingerprint:String)
+class Repository(private val db:SqlDriver,private val now:()->Double={System.currentTimeMillis()/1000.0}):Closeable {
+    companion object {const val TRASH_RETENTION=14*24*60*60.0}
     init {
         try {
             db.query("PRAGMA journal_mode=WAL"); db.execute("PRAGMA synchronous=FULL");db.execute("PRAGMA foreign_keys=ON");db.query("PRAGMA busy_timeout=3000")
             val version=(db.query("PRAGMA user_version").single().single() as Number).toInt()
-            require(version<=2) { "Newer database schema; existing bytes preserved." }
+            require(version<=3) { "Newer database schema; existing bytes preserved." }
             if(version==0) transaction {
                 db.execute("CREATE TABLE documents(slot TEXT PRIMARY KEY, title TEXT NOT NULL, revision INTEGER NOT NULL, current BLOB NOT NULL, previous BLOB)")
                 db.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -24,6 +26,13 @@ class Repository(private val db:SqlDriver):Closeable {
             if(version<2) transaction {
                 db.execute("ALTER TABLE documents ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
                 db.execute("PRAGMA user_version=2")
+            }
+            if(version<3) transaction {
+                db.execute("ALTER TABLE documents ADD COLUMN deleted_at REAL")
+                db.execute("ALTER TABLE documents ADD COLUMN deletion_token TEXT")
+                db.execute("CREATE TABLE purged_slots(slot TEXT PRIMARY KEY)")
+                list(true).forEach {stampDeletion(it.slot)}
+                db.execute("PRAGMA user_version=3")
             }
             require(db.query("PRAGMA quick_check").single().single()=="ok") { "Local database integrity check failed; existing bytes preserved." }
         } catch(e:Exception) {db.close();throw e}
@@ -43,6 +52,7 @@ class Repository(private val db:SqlDriver):Closeable {
         val current=load(slot)
         require(current.fingerprint==expectedFingerprint) {"This report changed. Reopen it before deleting; nothing was deleted."}
         db.execute("UPDATE documents SET deleted=1 WHERE slot=?",listOf(slot))
+        stampDeletion(slot)
         if(active()==slot) {
             val next=list().firstOrNull()?.slot
             if(next==null) db.execute("DELETE FROM metadata WHERE key='active'") else setActive(next)
@@ -51,7 +61,23 @@ class Repository(private val db:SqlDriver):Closeable {
     }
     @Synchronized fun restoreDeleted(slot:String):Loaded = transaction {
         validate(slot);require(list(true).any {it.slot==slot}) {"This report is no longer in Recently Deleted."}
-        db.execute("UPDATE documents SET deleted=0 WHERE slot=?",listOf(slot));setActive(slot);load(slot)
+        db.execute("UPDATE documents SET deleted=0,deleted_at=NULL,deletion_token=NULL WHERE slot=?",listOf(slot));setActive(slot);load(slot)
+    }
+    private fun stampDeletion(slot:String) {db.execute("UPDATE documents SET deleted_at=?,deletion_token=? WHERE slot=? AND deleted=1",listOf(now(),identity(),slot))}
+    @Synchronized fun trash():List<TrashItem> = db.query("SELECT slot,title,deleted_at,deletion_token,current,previous FROM documents WHERE deleted=1 ORDER BY slot").map {row ->
+        val time=(row[2] as? Number)?.toDouble() ?: error("Incomplete trash date; nothing was removed.")
+        require(time.isFinite()) {"Invalid trash date; nothing was removed."}
+        val token=row[3] as? String ?: error("Incomplete trash metadata; nothing was removed.")
+        TrashItem(row[0] as String,row[1] as String,time,Exchange.digest((token+time).toByteArray()+((row[4] as? ByteArray) ?: byteArrayOf())+((row[5] as? ByteArray) ?: byteArrayOf())))
+    }
+    @Synchronized fun clearTrash(expected:List<TrashItem>):Int=purge(expected,false)
+    @Synchronized fun cleanupExpiredTrash():Int=purge(emptyList(),true)
+    private fun purge(expected:List<TrashItem>,expiredOnly:Boolean):Int=transaction {
+        val current=trash();require(expiredOnly || current==expected) {"Recently Deleted changed. Review Clear Trash again; nothing was removed."}
+        val instant=now();val targets=if(expiredOnly) current.filter {instant-it.deletedAt>=TRASH_RETENTION} else current
+        require(targets.none {it.slot==active()}) {"An active report cannot be purged; nothing was removed."}
+        targets.forEach {item ->validate(item.slot);db.execute("INSERT OR IGNORE INTO purged_slots(slot) VALUES(?)",listOf(item.slot));db.execute("DELETE FROM documents WHERE slot=? AND deleted=1",listOf(item.slot))}
+        targets.size
     }
     @Synchronized fun load(slot:String,previous:Boolean=false):Loaded {
         val bytes=bytes(slot,previous) ?: throw ReportException("Local snapshot not found.")
@@ -65,6 +91,7 @@ class Repository(private val db:SqlDriver):Closeable {
         validate(slot);val payload=Exchange.export(report,device);Exchange.read(payload)
         return transaction {
             val current=bytes(slot)
+            require(db.query("SELECT slot FROM purged_slots WHERE slot=?",listOf(slot)).isEmpty()) {"This report was permanently removed. Import a backup as a new report."}
             require(current!=null || bytes(slot,includeDeleted=true)==null) {"This report is in Recently Deleted. Restore it before editing; no changes were accepted."}
             if(current!=null) {
                 Exchange.read(current)

@@ -41,6 +41,24 @@ class RepositoryTests {
         val interrupted=object:SqlDriver by driver {override fun execute(sql:String,args:List<Any?>) {if(fail && sql=="COMMIT") throw ReportException("Interrupted delete");driver.execute(sql,args)}}
         Repository(interrupted).use {repo ->val slot=identity();val report=demo();val hash=repo.save(slot,report,"Test",null);fail=true;assertFails {repo.delete(slot,hash)};fail=false;assertEquals(report,repo.load(slot).report);assertEquals(slot,repo.active());assertTrue(repo.list(true).isEmpty())}
     }
+    @Test fun trashAgeBoundaryAndStaleConfirmationsProtectLiveReports() {
+        var now=1_800_000_000.0;val path=root().resolve("trash.sqlite3")
+        Repository(JdbcDriver(path),{now}).use {repo ->
+            val deleted=identity();val hash=repo.save(deleted,demo(),"Test",null);repo.delete(deleted,hash);val stale=repo.trash()
+            repo.restoreDeleted(deleted);repo.delete(deleted,hash);assertFails {repo.clearTrash(stale)}
+            val active=identity();val activeHash=repo.save(active,demo(),"Test",null)
+            now+=Repository.TRASH_RETENTION-1;assertEquals(0,repo.cleanupExpiredTrash());now++;assertEquals(1,repo.cleanupExpiredTrash())
+            assertEquals(active,repo.active());assertEquals(activeHash,repo.load(active).fingerprint);assertFails {repo.restoreDeleted(deleted)};assertFails {repo.save(deleted,demo(),"Stale",null)}
+        }
+    }
+    @Test fun purgeCommitFailureRollsBackAndRestoredReportNeverExpires() {
+        val driver=JdbcDriver(root().resolve("trash.sqlite3"));var fail=false;var now=1_800_000_000.0
+        val wrapped=object:SqlDriver by driver {override fun execute(sql:String,args:List<Any?>) {if(fail && sql=="COMMIT") error("Interrupted purge");driver.execute(sql,args)}}
+        Repository(wrapped,{now}).use {repo ->
+            val id=identity();val hash=repo.save(id,demo(),"Test",null);repo.delete(id,hash);val request=repo.trash();fail=true;assertFails {repo.clearTrash(request)};fail=false;assertEquals(request,repo.trash())
+            now-=100_000;assertEquals(0,repo.cleanupExpiredTrash());repo.restoreDeleted(id);now+=Repository.TRASH_RETENTION*10;assertEquals(0,repo.cleanupExpiredTrash());assertEquals(hash,repo.load(id).fingerprint)
+        }
+    }
     @Test fun invalidSlotAndFutureSchemaPreserveExistingDatabase() {
         val path=root().resolve("reports.sqlite3");Repository(JdbcDriver(path)).use {r -> assertFails {r.save("../escape",demo(),"Test",null)} }
         JdbcDriver(path).use {it.execute("PRAGMA user_version=99")};assertFails {Repository(JdbcDriver(path))};JdbcDriver(path).use { assertEquals(99,(it.query("PRAGMA user_version").single().single() as Number).toInt()) }

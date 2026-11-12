@@ -45,7 +45,7 @@ class AppState(private val repository:Repository?,val platform:PlatformGateway) 
     var lastExport by mutableStateOf<String?>(null);private set
     private var fingerprint:String?=null
     init {
-        try {repository?.active()?.let { adopt(repository.select(it)) };refresh()}
+        try {repository?.active()?.let { adopt(repository.select(it)) };refresh();cleanupExpiredTrash()}
         catch(e:Exception) {blocked=true;error="Existing reports could not be read. Their bytes were preserved. ${e.message}"}
     }
     private fun adopt(loaded:Loaded) {slot=loaded.slot;report=loaded.report;fingerprint=loaded.fingerprint;status="Saved on this device";blocked=false;selected=report.active.firstOrNull { "Circle" in it.flags }?.id ?: report.active.lastOrNull()?.id}
@@ -80,6 +80,9 @@ class AppState(private val repository:Repository?,val platform:PlatformGateway) 
         require(!blocked && pending==null) {"Resolve recovery or import before restoring a report."}
         adopt(repository!!.restoreDeleted(id));refresh()
     }
+    fun trashRequest():List<TrashItem> {require(!blocked && pending==null) {"Resolve recovery or import before clearing trash."};return repository!!.trash()}
+    fun clearTrash(request:List<TrashItem>)=attempt {require(!blocked && pending==null);repository!!.clearTrash(request);refresh()}
+    fun cleanupExpiredTrash() {if(!blocked && pending==null) attempt {repository!!.cleanupExpiredTrash();refresh()}}
     fun previous()=attempt {open(repository!!.load(slot,true).report)}
     fun next(scene:String) {change("Added take") {it.next(scene,platform.label)};selected=report.active.lastOrNull()?.id}
     fun entry(id:String,summary:String,action:(Entry)->Entry)=change(summary) {r -> r.copy(entries=r.entries.map {if(it.id==id) action(it) else it})}
@@ -99,6 +102,8 @@ private val Green=Color(0xff237b20)
     val palette=if(dark) darkColorScheme(primary=Color(0xff95df8d),secondary=Color(0xff95df8d),secondaryContainer=Color(0xff34452f),onSecondaryContainer=Color(0xffc3efbc),outline=Color(0xff8d7784),outlineVariant=Color(0xff49333f),background=Color(0xff191419),surface=Color(0xff251d23),onSurface=Color(0xfff3eaf0)) else lightColorScheme(primary=Green,secondary=Green,secondaryContainer=Color(0xffdaeed6),onSecondaryContainer=Color(0xff1c4618),background=Color(0xfffaf8f9),surface=Color.White)
     var page by remember {mutableStateOf("Today")};var detail by remember {mutableStateOf(host.preference("detail","Standard"))}
     var documentPicker by remember {mutableStateOf(false)}
+    var trashToClear by remember {mutableStateOf<List<TrashItem>?>(null)}
+    LaunchedEffect(state) {while(true) {state.cleanupExpiredTrash();kotlinx.coroutines.delay(3_600_000)}}
     var reportToDelete by remember {mutableStateOf<AppState.DeletionRequest?>(null)}
     var notices by remember {mutableStateOf<String?>(null)}
     MaterialTheme(colorScheme=palette) {
@@ -146,6 +151,11 @@ private val Green=Color(0xff237b20)
                                             Choice("Production mode",state.report.productionMode.label,listOf("Movie","TV")) {v ->state.change("Changed production mode; all values retained") {it.withProductionMode(if(v=="TV") ProductionMode.TV else ProductionMode.MOVIE)}}
                                             Text("Movie hides Season and Episode. TV shows them in Today and reports. Hidden values are kept for this report.")
                                         }
+                                        Section("Trash") {
+                                            Text("Deleted reports are permanently removed after 14 days, when the app next opens or while it is running. Restoring cancels cleanup. Existing trash gets a fresh 14 days after this update.")
+                                            OutlinedButton(onClick={state.attempt {trashToClear=state.trashRequest()}},enabled=state.deletedDocuments.isNotEmpty() && !state.blocked && state.pending==null) {Text("Clear Trash…")}
+                                            Text("Exports and external backups are kept.")
+                                        }
                                         Section("Appearance") {
                                             Choice("Appearance",theme,listOf("System","Light","Dark")) {v -> theme=v;host.preference("theme",v,true)}
                                         }
@@ -166,7 +176,7 @@ private val Green=Color(0xff237b20)
                                             }}
                                         }
                                         if(state.deletedDocuments.isNotEmpty()) Section("Recently Deleted") {
-                                            Text("Deleted reports can be restored with their takes and previous snapshots.")
+                                            Text("Deleted reports can be restored for 14 days, then are permanently removed. Clear Trash in Settings removes them sooner.")
                                             state.deletedDocuments.forEach {doc ->Row(verticalAlignment=Alignment.CenterVertically) {
                                                 Text("${doc.title} · r${doc.revision}",Modifier.weight(1f))
                                                 TextButton(onClick={state.restoreDeletedReport(doc.slot)},enabled=!state.blocked && state.pending==null) {Text("Restore Report")}
@@ -176,7 +186,7 @@ private val Green=Color(0xff237b20)
                                             Text(state.status);state.lastExport?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
                                             Button(onClick={state.export("camreport")}) {Text("Save As .camreport")}
                                             OutlinedButton(onClick={state.importReport()}) {Text("Import Save…")}
-                                            Text("Schema 1 alpha: complete reports only. Import previews additions and competing edits; save is not proof of receipt.",style=MaterialTheme.typography.bodySmall)
+                                            Text("A .camreport includes all project fields, camera defaults, takes, notes, flags, review state and history, including hidden Movie/TV values. Open separately for a complete handoff. Media, attachments, device preferences, other reports and recovery snapshots are excluded. A save is not proof of receipt.",style=MaterialTheme.typography.bodySmall)
                                             TextButton(onClick={state.previous()},enabled=!state.blocked) {Text("Restore previous snapshot separately")}
                                         }
                                         Section("Preview and export") {
@@ -197,7 +207,8 @@ private val Green=Color(0xff237b20)
                 }
             }
         }
-        reportToDelete?.let {request ->AlertDialog(onDismissRequest={reportToDelete=null},title={Text("Delete report?")},text={Text("Move ${request.title} to Recently Deleted? You can restore it from Saves. Exported files are kept.")},confirmButton={TextButton(onClick={state.deleteReport(request);reportToDelete=null}) {Text("Delete Report")}},dismissButton={TextButton(onClick={reportToDelete=null}) {Text("Cancel")}})}
+        trashToClear?.let {request ->AlertDialog(onDismissRequest={trashToClear=null},title={Text("Permanently clear trash?")},text={Text("Remove ${request.size} deleted report(s) and their previous local snapshots from this device? This cannot be undone in the app. Saved reports, exports and external backups are kept.")},confirmButton={TextButton(onClick={state.clearTrash(request);trashToClear=null}) {Text("Permanently Remove ${request.size} Deleted Report(s)")}},dismissButton={TextButton(onClick={trashToClear=null}) {Text("Cancel")}})}
+        reportToDelete?.let {request ->AlertDialog(onDismissRequest={reportToDelete=null},title={Text("Delete report?")},text={Text("Move ${request.title} to Recently Deleted? You can restore it from Saves for 14 days. Exported files are kept.")},confirmButton={TextButton(onClick={state.deleteReport(request);reportToDelete=null}) {Text("Delete Report")}},dismissButton={TextButton(onClick={reportToDelete=null}) {Text("Cancel")}})}
         if(documentPicker) AlertDialog(onDismissRequest={documentPicker=false},title={Text("Open local report")},text={LazyColumn(Modifier.heightIn(max=400.dp)) {items(state.documents,key={it.slot}) {doc -> TextButton(onClick={state.select(doc.slot);documentPicker=false}) {Text("${doc.title} · r${doc.revision}")} }}},confirmButton={TextButton(onClick={documentPicker=false}) {Text("Done")}})
         state.pending?.let {incoming ->
             val preview=runCatching {Exchange.preview(state.report,incoming)}

@@ -4,17 +4,23 @@ import CSQLite
 // One connection per local app process; serialized by the app's MainActor. Never put this live DB on a shared drive.
 public final class Repository {
     private var db:OpaquePointer?
+    private let now:()->Date
+    public static let trashRetention:TimeInterval = 14 * 24 * 60 * 60
+    public struct TrashItem:Equatable,Identifiable {
+        public var id:String; public var title:String; public var deletedAt:Date; public var fingerprint:String
+    }
     private let transient = unsafeBitCast(-1,to:sqlite3_destructor_type.self)
     public struct Document { public var slot:String; public var title:String; public var revision:Int }
     public struct Loaded { public var slot:String; public var report:Report; public var fingerprint:String }
-    public init(url:URL) throws {
+    public init(url:URL,now:@escaping ()->Date = Date.init) throws {
+        self.now=now
         try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true)
         guard sqlite3_open_v2(url.path,&db,SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,nil) == SQLITE_OK else { let message = db.map{String(cString:sqlite3_errmsg($0))} ?? "Cannot open SQLite database"; if db != nil {sqlite3_close(db)}; db = nil; throw ReportError.invalid(message) }
         do {
             sqlite3_busy_timeout(db,3000)
             try execute("PRAGMA journal_mode=WAL"); try execute("PRAGMA synchronous=FULL"); try execute("PRAGMA foreign_keys=ON")
             let version = try scalarInt("PRAGMA user_version")
-            guard version <= 2 else {throw ReportError.invalid("Newer local database schema; existing data preserved")}
+            guard version <= 3 else {throw ReportError.invalid("Newer local database schema; existing data preserved")}
             if version == 0 {
                 try execute("BEGIN IMMEDIATE")
                 do {
@@ -27,6 +33,19 @@ public final class Repository {
                 try execute("BEGIN IMMEDIATE")
                 do { try execute("ALTER TABLE documents ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"); try execute("PRAGMA user_version=2"); try execute("COMMIT") }
                 catch { try? execute("ROLLBACK"); throw error }
+            }
+            if version < 3 {
+                try execute("BEGIN IMMEDIATE")
+                do {
+                    try execute("ALTER TABLE documents ADD COLUMN deleted_at REAL")
+                    try execute("ALTER TABLE documents ADD COLUMN deletion_token TEXT")
+                    try execute("CREATE TABLE purged_slots(slot TEXT PRIMARY KEY)")
+                    // Unknown historic deletion dates get a full grace period from migration.
+                    for item in try list(deleted:true) {
+                        try stampDeletion(item.slot)
+                    }
+                    try execute("PRAGMA user_version=3"); try execute("COMMIT")
+                } catch {try? execute("ROLLBACK");throw error}
             }
             guard try scalarText("PRAGMA quick_check") == "ok" else {throw ReportError.invalid("Local database integrity check failed; existing data preserved")}
         } catch {sqlite3_close(db); db = nil; throw error}
@@ -55,7 +74,48 @@ public final class Repository {
         let s=try statement("SELECT slot,title,revision FROM documents WHERE deleted=\(deleted ? 1 : 0) ORDER BY title,slot"); defer{sqlite3_finalize(s)}; var result:[Document]=[]
         while true {let status=sqlite3_step(s); if status == SQLITE_DONE {break}; guard status == SQLITE_ROW, let slot=sqlite3_column_text(s,0), let title=sqlite3_column_text(s,1) else {throw message()}; result.append(Document(slot:String(cString:slot),title:String(cString:title),revision:Int(sqlite3_column_int64(s,2))))}; return result
     }
-    public func knownSlots() throws ->Set<String> { Set(try list().map(\.slot) + list(deleted:true).map(\.slot)) }
+    public func knownSlots() throws ->Set<String> {
+        let s=try statement("SELECT slot FROM documents UNION SELECT slot FROM purged_slots");defer{sqlite3_finalize(s)}
+        var slots=Set<String>()
+        while true {let status=sqlite3_step(s);if status == SQLITE_DONE {break};guard status == SQLITE_ROW,let slot=sqlite3_column_text(s,0) else {throw message()};slots.insert(String(cString:slot))};return slots
+    }
+    private func stampDeletion(_ slot:String) throws {
+        let s=try statement("UPDATE documents SET deleted_at=?,deletion_token=? WHERE slot=? AND deleted=1");defer{sqlite3_finalize(s)}
+        guard sqlite3_bind_double(s,1,now().timeIntervalSince1970) == SQLITE_OK else {throw message()}
+        try bind(s,2,UUID().uuidString);try bind(s,3,slot);guard sqlite3_step(s) == SQLITE_DONE else {throw message()}
+    }
+    public func trash() throws ->[TrashItem] {
+        let s=try statement("SELECT slot,title,deleted_at,deletion_token,current,previous FROM documents WHERE deleted=1 ORDER BY slot");defer{sqlite3_finalize(s)}
+        var result:[TrashItem]=[]
+        while true {
+            let status=sqlite3_step(s);if status == SQLITE_DONE {break}
+            guard status == SQLITE_ROW,let slot=sqlite3_column_text(s,0),let title=sqlite3_column_text(s,1),let token=sqlite3_column_text(s,3),sqlite3_column_type(s,2) != SQLITE_NULL else {throw ReportError.invalid("Trash metadata is incomplete; nothing was removed.")}
+            let time=sqlite3_column_double(s,2);guard time.isFinite else {throw ReportError.invalid("Invalid trash date; nothing was removed.")}
+            var bytes=Data((String(cString:token)+String(time)).utf8)
+            for column:Int32 in [4,5] {if let blob=sqlite3_column_blob(s,column) {bytes.append(Data(bytes:blob,count:Int(sqlite3_column_bytes(s,column))))}}
+            result.append(TrashItem(id:String(cString:slot),title:String(cString:title),deletedAt:Date(timeIntervalSince1970:time),fingerprint:Exchange.digest(bytes)))
+        };return result
+    }
+    /// Only called after the UI confirms an exact trash snapshot, or by the authorized age policy.
+    @discardableResult public func clearTrash(expected:[TrashItem]) throws ->Int {try purge(expected:expected,expiredOnly:false,failBeforeCommit:false)}
+    @discardableResult public func cleanupExpiredTrash() throws ->Int {try purge(expected:[],expiredOnly:true,failBeforeCommit:false)}
+    @discardableResult func purge(expected:[TrashItem],expiredOnly:Bool,failBeforeCommit:Bool) throws ->Int {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let current=try trash(),instant=now()
+            if !expiredOnly && current != expected {throw ReportError.invalid("Recently Deleted changed. Review Clear Trash again; nothing was removed.")}
+            let targets=expiredOnly ? current.filter{instant.timeIntervalSince($0.deletedAt) >= Self.trashRetention} : current
+            let activeSlot=try active()
+            guard !targets.contains(where:{$0.id == activeSlot}) else {throw ReportError.invalid("An active report cannot be purged; nothing was removed.")}
+            for item in targets {
+                try validate(item.id)
+                let marker=try statement("INSERT INTO purged_slots(slot) VALUES(?) ON CONFLICT(slot) DO NOTHING");defer{sqlite3_finalize(marker)};try bind(marker,1,item.id);guard sqlite3_step(marker) == SQLITE_DONE else {throw message()}
+                let removal=try statement("DELETE FROM documents WHERE slot=? AND deleted=1");defer{sqlite3_finalize(removal)};try bind(removal,1,item.id);guard sqlite3_step(removal) == SQLITE_DONE else {throw message()}
+            }
+            if failBeforeCommit {throw ReportError.invalid("Injected interrupted purge")}
+            try execute("COMMIT");return targets.count
+        } catch {try? execute("ROLLBACK");throw error}
+    }
     public func delete(_ slot:String,expectedFingerprint:String) throws ->Loaded? {
         try delete(slot,expectedFingerprint:expectedFingerprint,failBeforeCommit:false)
     }
@@ -66,6 +126,7 @@ public final class Repository {
             guard current.fingerprint == expectedFingerprint else { throw ReportError.invalid("This report changed. Reopen it and review it before deleting; nothing was deleted.") }
             let s = try statement("UPDATE documents SET deleted=1 WHERE slot=?"); defer {sqlite3_finalize(s)}
             try bind(s,1,slot); guard sqlite3_step(s) == SQLITE_DONE else {throw message()}
+            try stampDeletion(slot)
             if try active() == slot {
                 if let next = try list().first { _ = try select(next.slot) }
                 else { try execute("DELETE FROM metadata WHERE key='active'") }
@@ -79,7 +140,7 @@ public final class Repository {
         try validate(slot); try execute("BEGIN IMMEDIATE")
         do {
             guard try list(deleted:true).contains(where:{$0.slot == slot}) else {throw ReportError.invalid("This report is no longer in Recently Deleted.")}
-            let s = try statement("UPDATE documents SET deleted=0 WHERE slot=?"); defer {sqlite3_finalize(s)}
+            let s = try statement("UPDATE documents SET deleted=0,deleted_at=NULL,deletion_token=NULL WHERE slot=?"); defer {sqlite3_finalize(s)}
             try bind(s,1,slot); guard sqlite3_step(s) == SQLITE_DONE else {throw message()}
             let loaded = try select(slot); try execute("COMMIT"); return loaded
         } catch {try? execute("ROLLBACK"); throw error}
@@ -102,6 +163,7 @@ public final class Repository {
         try execute("BEGIN IMMEDIATE")
         do {
             let current=try bytes(slot)
+            if current == nil,try knownSlots().contains(slot),try bytes(slot,includeDeleted:true) == nil {throw ReportError.invalid("This local report was permanently removed. Import a backup as a new report instead.")}
             if current == nil, try bytes(slot,includeDeleted:true) != nil {throw ReportError.invalid("This report is in Recently Deleted. Restore it before editing; no changes were accepted.")}
             if let current { _=try Exchange.read(current); guard expectedFingerprint == Exchange.digest(current) else {throw ReportError.invalid("This local report changed in another app instance. Reopen it before saving; no changes were accepted.")} }
             else if expectedFingerprint != nil {throw ReportError.invalid("Local document disappeared; no changes were accepted")}

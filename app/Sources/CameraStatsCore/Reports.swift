@@ -17,51 +17,71 @@ public enum Reports {
         return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shot Reporter report</title><style>body{font:14px system-ui;margin:32px;color:#241d21}table{border-collapse:collapse}td,th{border:1px solid #777;padding:8px;white-space:pre-wrap}thead{display:table-header-group}</style><h1>\(esc(report.values["title",default:"Untitled"]))</h1><p>A Squid Productions Software · Revision \(report.revision) · \(report.missing.isEmpty ? "Ready for Submission" : "DRAFT — \(report.missing.count) missing requirements")</p><p>\(esc(report.visibleProjectValues.sorted{$0.key < $1.key}.map{"\($0.key): \($0.value)"}.joined(separator:" · ")))</p><table><thead><tr>" + fields.map{"<th>\(esc($0.title))</th>"}.joined() + "<th>Flags</th></tr></thead><tbody>\(rows)</tbody></table></html>"
     }
     public static func pdf(_ report: Report) throws -> Data {
-        let output = NSMutableData()
-        var box = CGRect(x:0,y:0,width:842,height:595)
-        guard let consumer = CGDataConsumer(data:output), let cg = CGContext(consumer:consumer,mediaBox:&box,[kCGPDFContextCreator as String:"Shot Reporter · Squid Productions",kCGPDFContextTitle as String:report.values["title",default:"Shot Reporter report"]] as CFDictionary) else { throw ReportError.invalid("Could not create PDF") }
-        let font = CTFontCreateWithName("Helvetica" as CFString,9,nil)
-        func draw(_ s: String, _ x: CGFloat, _ y: CGFloat, _ size: CGFloat = 9) {
-            let attr = NSAttributedString(string:s,attributes:[NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString,size,nil)])
-            cg.textPosition = CGPoint(x:x,y:595-y); CTLineDraw(CTLineCreateWithAttributedString(attr),cg)
+        let output=NSMutableData(),pageWidth:CGFloat=842,pageHeight:CGFloat=595
+        var box=CGRect(x:0,y:0,width:pageWidth,height:pageHeight)
+        guard let consumer=CGDataConsumer(data:output),let cg=CGContext(consumer:consumer,mediaBox:&box,[kCGPDFContextCreator as String:"Shot Reporter - Squid Productions",kCGPDFContextTitle as String:report.values["title",default:"Shot Reporter report"]] as CFDictionary) else {throw ReportError.invalid("Could not create PDF")}
+        struct Line {let text:String;let bold:Bool}
+        func draw(_ text:String,_ x:CGFloat,_ y:CGFloat,_ size:CGFloat=10,_ bold:Bool=false) {
+            let font=CTFontCreateWithName((bold ? "Helvetica-Bold" : "Helvetica") as CFString,size,nil)
+            let attr=NSAttributedString(string:text,attributes:[NSAttributedString.Key(kCTFontAttributeName as String):font,NSAttributedString.Key(kCTForegroundColorAttributeName as String):CGColor(gray:0.12,alpha:1)])
+            cg.textPosition=CGPoint(x:x,y:pageHeight-y);CTLineDraw(CTLineCreateWithAttributedString(attr),cg)
         }
-        func wrap(_ text: String, width: CGFloat) -> [String] {
-            if text.isEmpty { return [""] }
-            let attr = NSAttributedString(string:text,attributes:[NSAttributedString.Key(kCTFontAttributeName as String):font])
-            let ts = CTTypesetterCreateWithAttributedString(attr), ns = text as NSString
-            var index = 0, lines:[String] = []
-            while index < ns.length { let count = max(1,CTTypesetterSuggestLineBreak(ts,index,Double(width))); lines.append(ns.substring(with:NSRange(location:index,length:count)).trimmingCharacters(in:.newlines)); index += count }
-            return lines
-        }
-        var page = 0, y:CGFloat = 0
-        let xs:[CGFloat] = [28,83,118,187,252,301,355,423,548]
-        let widths:[CGFloat] = [51,31,65,61,45,50,64,121,265]
-        func begin() {
-            page += 1; cg.beginPDFPage(nil); draw("Shot Reporter · Cinematic Arts Camera Report",28,30,16); draw("A Squid Productions Software",28,47,9)
-            draw("\(report.values["title",default:"Untitled"]) · \(report.values["date",default:""]) · Day \(report.values["day",default:""]) · Revision \(report.revision) · Page \(page)",28,65,10)
-            draw(report.missing.isEmpty ? "READY FOR SUBMISSION · self-reviewed local report" : "DRAFT · \(report.missing.count) outstanding requirements — export is not proof of submission",28,82,9)
-            let metadata = report.projectFields.filter{!["title","date","day"].contains($0.id)}.map{"\($0.title): \(report.values[$0.id,default:"—"])"}.joined(separator:" · ")
-            for (i,line) in wrap(metadata,width:786).enumerated() { draw(line,28,100+CGFloat(i)*12) }
-            let headers = ["Scene","Take","Camera","Lens","T-stop","Height","Distance","Recording settings","Remarks / flags / role notes"]
-            y = 145
-            for i in headers.indices { draw(headers[i],xs[i],y,8) }; y += 10
-            cg.setStrokeColor(CGColor(gray:0.5,alpha:1)); cg.move(to:CGPoint(x:28,y:595-y)); cg.addLine(to:CGPoint(x:814,y:595-y)); cg.strokePath(); y += 14
-        }
-        begin()
-        if report.active.isEmpty { draw("No takes recorded.",28,y) }
-        for e in report.active {
-            let v = e.values
-            let technical = Schema.settings.filter{!["camera","roll","lens","stop","height","distance"].contains($0.id)}.map{"\($0.title): \(v[$0.id,default:"—"])"}.joined(separator:"; ")
-            let notes = (["Flags: " + (e.flags.isEmpty ? "None" : e.flags.sorted().joined(separator:", ")), e.reviewed ? "Reviewed" : "Review pending"] + Schema.take.filter{!["scene","take"].contains($0.id)}.filter{!v[$0.id,default:""].isEmpty}.map{"\($0.title): \(v[$0.id,default:""])"}).joined(separator:"\n")
-            let columns = [v["scene",default:"—"],v["take",default:"—"],v["camera",default:"—"],v["lens",default:"—"],v["stop",default:"—"],v["height",default:"—"],v["distance",default:"—"],technical,notes]
-            let lines = columns.enumerated().map{wrap($0.element,width:widths[$0.offset])}
-            for n in 0..<(lines.map(\.count).max() ?? 1) {
-                if y > 555 { cg.endPDFPage(); begin(); draw("Continued take \(v["scene",default:""]) / \(v["take",default:""])",28,y,8); y += 14 }
-                for i in lines.indices where n < lines[i].count { draw(lines[i][n],xs[i],y) }; y += 12
+        func wrap(_ text:String,width:CGFloat,bold:Bool=false)->[Line] {
+            let font=CTFontCreateWithName((bold ? "Helvetica-Bold" : "Helvetica") as CFString,bold ? 9:10,nil)
+            return text.components(separatedBy:.newlines).flatMap {paragraph -> [Line] in
+                if paragraph.isEmpty {return [Line(text:"",bold:bold)]}
+                let attr=NSAttributedString(string:paragraph,attributes:[NSAttributedString.Key(kCTFontAttributeName as String):font])
+                let ts=CTTypesetterCreateWithAttributedString(attr),ns=paragraph as NSString
+                var index=0,result:[Line]=[]
+                while index < ns.length {let count=max(1,CTTypesetterSuggestLineBreak(ts,index,Double(width)));result.append(Line(text:ns.substring(with:NSRange(location:index,length:count)),bold:bold));index += count}
+                return result
             }
-            y += 3; cg.setStrokeColor(CGColor(gray:0.8,alpha:1)); cg.move(to:CGPoint(x:28,y:595-y)); cg.addLine(to:CGPoint(x:814,y:595-y)); cg.strokePath(); y += 14
         }
-        cg.endPDFPage(); cg.closePDF(); return output as Data
+        func field(_ title:String,_ value:String?,width:CGFloat)->[Line] {
+            wrap(title+":",width:width,bold:true)+wrap(value?.isEmpty == false ? value!:"Not entered",width:width)+[Line(text:"",bold:false)]
+        }
+        var page=0
+        func begin(_ section:String) {
+            page += 1;cg.beginPDFPage(nil)
+            draw("Shot Reporter - Camera Report",28,30,17,true)
+            draw("A Squid Productions Software",28,47,9)
+            draw(section,28,72,11,true)
+            cg.setStrokeColor(CGColor(gray:0.72,alpha:1));cg.move(to:CGPoint(x:28,y:pageHeight-82));cg.addLine(to:CGPoint(x:814,y:pageHeight-82));cg.strokePath()
+            draw("Revision \(report.revision)  |  Report \(report.id.prefix(8))",28,577,8)
+            draw("Page \(page)",755,577,8)
+        }
+        // A separate production overview keeps long crew/project information away from take details.
+        let status=report.missing.isEmpty ? "READY FOR SUBMISSION - self-reviewed local report":"DRAFT - \(report.missing.count) outstanding requirements"
+        var overview=wrap(status,width:786,bold:true)+[Line(text:"",bold:false)]
+        overview += field("Production mode",report.productionMode.title,width:786)
+        for f in report.projectFields {overview += field(f.title,report.values[f.id],width:786)}
+        var offset=0
+        repeat {
+            begin(offset == 0 ? "Production / crew":"Production / crew - continued")
+            let end=min(offset+35,overview.count)
+            for n in offset..<end {let line=overview[n];draw(line.text,28,104+CGFloat(n-offset)*13,line.bold ? 9:10,line.bold)}
+            cg.endPDFPage();offset=end
+        } while offset < overview.count
+        let active=report.active
+        if active.isEmpty {begin("Takes");draw("No takes recorded.",28,110);cg.endPDFPage()}
+        let widths:[CGFloat]=[210,240,300],xs:[CGFloat]=[28,256,514]
+        for (index,e) in active.enumerated() {
+            let v=e.values
+            let camera=[Field("scene","Scene / setup",""),Field("take","Take label","")]+Schema.settings.filter{["camera","mag","load","lens","stop","height","distance"].contains($0.id)}
+            let recording=Schema.settings.filter{!["camera","mag","load","lens","stop","height","distance","roll"].contains($0.id)}
+            let notes=Schema.take.filter{!["scene","take"].contains($0.id)}
+            let columns=[camera.flatMap{field($0.title,v[$0.id],width:widths[0])},recording.flatMap{field($0.title,v[$0.id],width:widths[1])},field("Flags",e.flags.isEmpty ? "None":e.flags.sorted().joined(separator:", "),width:widths[2])+field("Review",e.reviewed ? "Reviewed":"Review pending",width:widths[2])+notes.flatMap{field($0.title,v[$0.id],width:widths[2])}]
+            // Keep columns independent and preserve long multiline notes on labeled continuation pages.
+            var row=0
+            repeat {
+                begin("Take \(index+1) of \(active.count) - \(row == 0 ? "recorded details":"continued")")
+                for i in columns.indices {draw(["CAMERA / MEDIA / LENS","RECORDING SETTINGS","NOTES / POST REFERENCES"][i],xs[i],103,9,true)}
+                let end=min(row+33,columns.map(\.count).max() ?? 0)
+                for n in row..<end {for i in columns.indices where n < columns[i].count {let line=columns[i][n];draw(line.text,xs[i],124+CGFloat(n-row)*13,line.bold ? 9:10,line.bold)}}
+                cg.endPDFPage();row=end
+            } while row < (columns.map(\.count).max() ?? 0)
+        }
+        cg.closePDF();return output as Data
     }
 }
 public enum Naming {

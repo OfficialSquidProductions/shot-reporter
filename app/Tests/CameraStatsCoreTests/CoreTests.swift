@@ -97,7 +97,7 @@ final class CoreTests: XCTestCase {
     func testPDFLongNotesContinueWithFlagsAndHeaders() throws {
         var r = Report.fixture(); r.entries[0].values["remarks"] = String(repeating:"Long technical note for continuity. ",count:500) + "FINAL-NOTE-MARKER"; r.entries[0].flags.insert("MOS")
         let data = try Reports.pdf(r); let pdf = try XCTUnwrap(PDFDocument(data:data))
-        XCTAssertGreaterThan(pdf.pageCount,2); XCTAssertTrue(pdf.string?.contains("FINAL-NOTE-MARKER") == true); XCTAssertTrue(pdf.string?.contains("MOS") == true)
+        XCTAssertGreaterThan(pdf.pageCount,2); XCTAssertTrue(pdf.string?.replacingOccurrences(of:"\n",with:"").contains("FINAL-NOTE-MARKER") == true); XCTAssertTrue(pdf.string?.contains("MOS") == true)
         for n in 0..<pdf.pageCount { let page = try XCTUnwrap(pdf.page(at:n)); XCTAssertTrue(page.string?.contains("Revision") == true); XCTAssertEqual(page.bounds(for:.mediaBox).width,842) }
         try data.write(to:URL(fileURLWithPath:"/tmp/camerastats-long-notes.pdf"))
     }

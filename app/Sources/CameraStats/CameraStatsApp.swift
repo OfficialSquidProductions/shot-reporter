@@ -78,6 +78,8 @@ struct Workspace: View {
     @State private var pdfPreview: PDFReview?
     @State private var showingSupport=false
     @State private var reportToDelete: Store.DeletionRequest?
+    @State private var trashToClear:Store.TrashRequest?
+    @Environment(\.scenePhase) private var scenePhase
     private var diagnostics:DiagnosticsCenter {DiagnosticsCenter.shared}
     var scheme:ColorScheme? { theme == "Dark" ? .dark : theme == "Light" ? .light : nil }
     var body: some View {
@@ -114,6 +116,8 @@ struct Workspace: View {
             #endif
         }.tint(Color("AccentColor")).preferredColorScheme(scheme).background(Color("Canvas"))
         .onOpenURL { readImport($0) }
+        .onChange(of:scenePhase) {_,phase in if phase == .active {store.cleanupExpiredTrash()}}
+        .onReceive(Timer.publish(every:3600,on:.main,in:.common).autoconnect()) {_ in store.cleanupExpiredTrash()}
         .onChange(of:selected) { _,value in showRecordingSettings = value == nil }
         .onChange(of:store.slot) { _,_ in selected = nil; scene = ""; showRecordingSettings = true }
         #if os(macOS)
@@ -129,7 +133,11 @@ struct Workspace: View {
         .confirmationDialog("Delete report?",isPresented:Binding(get:{reportToDelete != nil},set:{if !$0 {reportToDelete=nil}}),titleVisibility:.visible,presenting:reportToDelete) { request in
             Button("Delete Report",role:.destructive) {store.deleteReport(request);reportToDelete=nil}
             Button("Cancel",role:.cancel) {reportToDelete=nil}
-        } message: { request in Text("Move \(request.title) to Recently Deleted? You can restore it from Saves. Exported files are kept.") }
+        } message: { request in Text("Move \(request.title) to Recently Deleted? You can restore it from Saves. Deleted reports are automatically removed after 14 days. Exported files are kept.") }
+        .confirmationDialog("Permanently clear trash?",isPresented:Binding(get:{trashToClear != nil},set:{if !$0 {trashToClear=nil}}),titleVisibility:.visible,presenting:trashToClear) {request in
+            Button("Permanently Remove \(request.items.count) Deleted Report(s)",role:.destructive) {store.clearTrash(request);trashToClear=nil}
+            Button("Cancel",role:.cancel) {trashToClear=nil}
+        } message: {request in Text("Remove \(request.items.count) deleted report(s) and their previous local snapshots from this device? This cannot be undone in the app. Saved reports are kept. Previously exported files, legacy recovery files and external backups are not erased.")}
         .sheet(item:$pdfPreview) { item in PDFReviewScreen(item:item) }
         .alert("Shot Reporter",isPresented:Binding(get:{store.error != nil},set:{if !$0 { store.error = nil }})) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
@@ -185,6 +193,13 @@ struct Workspace: View {
                     ForEach(ProductionMode.allCases) {mode in Text(mode.title).tag(mode)}
                 }.pickerStyle(.segmented)
                 Text("Movie hides Season and Episode. TV shows them in Today and reports. Hidden values are kept for this report.").font(.caption)
+            }
+            Section("Trash") {
+                Text("Deleted reports are permanently removed after 14 days, when the app next opens or becomes active, and hourly while open. Restoring a report cancels its cleanup. Reports already in trash when this version first opens get a fresh 14 days.").font(.caption)
+                Button("Clear Trash…",role:.destructive) {do {trashToClear=try store.trashRequest()} catch {store.error=error.localizedDescription}}
+                    .disabled(store.deletedDocuments.isEmpty || store.blocked || store.pendingImport)
+                Text("Clear Trash affects deleted reports on this device only. Exports, legacy recovery files and external backups are kept.").font(.caption)
+                if let notice=store.trashNotice {Text(notice).font(.caption)}
             }
             Section("Appearance") {
                 Picker("Appearance",selection:$theme) { ForEach(["System","Light","Dark"],id:\.self) { Text($0) } }
@@ -280,7 +295,7 @@ struct Workspace: View {
             }
             if !store.deletedDocuments.isEmpty {
                 Section("Recently Deleted") {
-                    Text("Deleted reports stay here until you restore them. Their saved takes and previous snapshots are kept.").font(.caption)
+                    Text("Deleted reports can be restored for 14 days, then are permanently removed. Clear Trash in Settings removes them sooner.").font(.caption)
                     ForEach(store.deletedDocuments,id:\.0) {doc in
                         HStack {Text(doc.1);Spacer();Button("Restore Report") {store.restoreDeletedReport(doc.0)}.disabled(store.blocked || store.pendingImport)}.buttonStyle(.borderless)
                     }
@@ -290,7 +305,7 @@ struct Workspace: View {
                 status; Text("Device: \(store.device) · report revision \(store.report.revision) · last file export \(store.lastExportedRevision.map{ "r\($0)" } ?? "none")").font(.caption)
                 Button("Save As .camreport") { export(.camreport,"camreport") {try Exchange.export(store.report,device:store.device)} }
                 Button("Import Save…") { importing = true }
-                Text("Schema 1 alpha: complete report only, no attachments or scoped packages. Import previews independent additions; competing edits must be opened separately. A saved file is not proof of receipt.").font(.caption)
+                Text("A .camreport includes all project/crew fields, Movie/TV metadata (including hidden values), camera defaults, every take and note, flags, review state and edit history. Import on iPhone or Mac with Open as separate editable report for a complete handoff. Attachments, media, device preferences, other saved reports and local recovery snapshots are not included. Merge accepts independent additions only; competing edits must be opened separately. A saved file is not proof of receipt.").font(.caption)
                 Button("Restore previous local snapshot as separate report") { store.restore() }
             }
             Section("Preview and export") {
