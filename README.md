@@ -17,7 +17,7 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 - Delete unneeded reports in Saves and restore them from Recently Deleted.
 - Choose Movie (default) or TV in Settings for each report. TV shows Season and Episode; switching modes keeps their values. Digital reports omit camera roll/reel.
 
-The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The signed Mac update is available in [release 0.2.0-alpha.9](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.9). The Windows installer remains in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
+The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The signed Mac update is available in [release 0.2.0-alpha.10](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.10). The Windows installer remains in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
 
 ## Local saves and imports
 
@@ -41,6 +41,6 @@ The Android/Windows clients share a Kotlin/JVM report engine and Compose screens
 
 ## Validation and releases
 
-Mac 0.2.0-alpha.9/build 12 is available for Apple Silicon on macOS 14+, with Developer ID signing, notarization and an authenticated Sparkle feed. A real public alpha.8 → alpha.9 install and automatic relaunch preserved both report snapshots through local database schema 1 → 2 migration. iOS and universal Mac TestFlight 0.2.0/build 12 are Testing in the existing Owner Testing group. The Windows alpha.6 MSI remains an unsigned manual installer; Android binaries are unchanged. See [alpha.9 acceptance](docs/releases/0.2.0-alpha.9-acceptance.json) for exact source, checksums and validation limits.
+Mac 0.2.0-alpha.10/build 13 is available for Apple Silicon on macOS 14+, with Developer ID signing, notarization and an authenticated Sparkle feed. A real public alpha.9 → alpha.10 install and automatic relaunch preserved active and deleted report snapshots through local database schema 2 → 3 migration. Trash cleanup has a fresh 14-day grace period for existing deleted reports. PDFs use labeled per-take sections, and a native iOS Simulator/Mac full-project handoff passed. iOS and universal Mac TestFlight build 13 uploads succeeded; tester assignment is pending final verification. Windows and Android binaries are unchanged. See the release's curated acceptance and handoff receipts for exact checks and limits.
 
 Physical device/field testing, a 12-hour offline day, low-storage/power-loss checks, full conflict resolution, and exact supplied report-form parity remain open. See [requirements](docs/REQUIREMENTS.md), [validation history](docs/VALIDATION.md), and [release checklist](docs/RELEASE.md). Source is MIT licensed; third-party components retain their licenses, and the supplied SP mark remains unchanged.
