@@ -14,8 +14,10 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 - Check missing fields and self-review the report before handoff.
 - Preview landscape PDFs, export CSV/HTML, and exchange editable `.camreport` files.
 - Start with a blank report or reopen an existing local report.
+- Delete unneeded reports in Saves and restore them from Recently Deleted.
+- Choose Movie (default) or TV in Settings for each report. TV shows Season and Episode; switching modes keeps their values. Digital reports omit camera roll/reel.
 
-The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The signed Mac update is available in [release 0.2.0-alpha.8](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.8). The Windows installer remains in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
+The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The signed Mac update is available in [release 0.2.0-alpha.9](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.9). The Windows installer remains in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
 
 ## Local saves and imports
 
@@ -39,6 +41,6 @@ The Android/Windows clients share a Kotlin/JVM report engine and Compose screens
 
 ## Validation and releases
 
-Reporting-only 0.2.0-alpha.6 is available for Apple Silicon on macOS 14+ and Windows 10+ x64. The Mac archive is signed/notarized; the Windows MSI is an unsigned manual installer with native upgrade validation. [Downloads and platform status](https://shotreporter.squidproductions.org). Mobile binaries and automatic update feeds remain unchanged. Release receipts include exact source commits, checksums, and validation limits.
+Mac 0.2.0-alpha.9/build 12 is available for Apple Silicon on macOS 14+, with Developer ID signing, notarization and an authenticated Sparkle feed. A real public alpha.8 → alpha.9 install and automatic relaunch preserved both report snapshots through local database schema 1 → 2 migration. iOS and universal Mac TestFlight 0.2.0/build 12 are Testing in the existing Owner Testing group. The Windows alpha.6 MSI remains an unsigned manual installer; Android binaries are unchanged. See [alpha.9 acceptance](docs/releases/0.2.0-alpha.9-acceptance.json) for exact source, checksums and validation limits.
 
 Physical device/field testing, a 12-hour offline day, low-storage/power-loss checks, full conflict resolution, and exact supplied report-form parity remain open. See [requirements](docs/REQUIREMENTS.md), [validation history](docs/VALIDATION.md), and [release checklist](docs/RELEASE.md). Source is MIT licensed; third-party components retain their licenses, and the supplied SP mark remains unchanged.

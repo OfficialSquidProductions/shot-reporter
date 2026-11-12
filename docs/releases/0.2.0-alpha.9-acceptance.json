@@ -1,0 +1,70 @@
+{
+  "version": "0.2.0-alpha.9",
+  "build": 12,
+  "sourceCommit": "f421761f7908b0d5a0e8b69762292a157216769c",
+  "archiveSHA256": "d98b2315821afb00dacc5581a14eb0e08a271259b939eeda890061d0f19bf623",
+  "nativeSignedUpgrade": {
+    "from": "0.2.0-alpha.8 / build 11 exact public app",
+    "to": "0.2.0-alpha.9 / build 12 exact public ZIP",
+    "authenticatedFeed": true,
+    "signedArchiveAuthenticated": true,
+    "offerDismissedAndRetried": true,
+    "keepWorkingThenResumed": true,
+    "saveInstallAndAutomaticRelaunch": true,
+    "relaunchedPID": 79225,
+    "installedBundleMatchesNotarizedExportFilesAndSymlinks": 71,
+    "codesignStrictDeep": true,
+    "staplerValidated": true,
+    "isolatedSyntheticReport": true,
+    "schemaMigration": [
+      1,
+      2
+    ],
+    "currentAndPreviousBlobsUnchanged": true,
+    "activeSelectionAndRevisionUnchanged": true,
+    "appearanceDarkRetained": true,
+    "defaultMovieHidesLegacySeasonEpisode": true,
+    "tvRevealsRetainedSeason3Episode9": true,
+    "launchContextRestored": true
+  },
+  "ownerReports": {
+    "existingRootsChecked": 2,
+    "allSevenReportsAndSnapshotsAndMetadataUnchanged": true,
+    "installedOwnerAppUnchanged": true
+  },
+  "notes": "Initial direct-executable QA launch could not expose its modal dialog and was stopped; it is not counted as acceptance. The normal LaunchServices launch above completed the full native flow without manually stopping or relaunching either app.",
+  "testflight": {
+    "marketingVersion": "0.2.0",
+    "build": 12,
+    "iOS": {
+      "id": "b73a68c8-0aca-4b2f-9ec3-a62a5173633e",
+      "status": "Testing"
+    },
+    "macOS": {
+      "id": "846518a1-0e74-4310-9ea5-fe76059d6424",
+      "status": "Testing",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ]
+    },
+    "group": "Owner Testing",
+    "testers": 1,
+    "whatToTestSaved": true,
+    "externalTesting": false,
+    "publicAppStoreSubmission": false
+  },
+  "tests": {
+    "swiftPassed": 61,
+    "packagingPassed": 26,
+    "sharedClientPassed": 46,
+    "sharedClientPlatformSkipped": 2,
+    "nativeWindowsCandidateRun": "43176016347",
+    "nativeWindowsCandidateConclusion": "success",
+    "desktopDevelopmentRun": "43176016316",
+    "desktopDevelopmentConclusion": "success"
+  },
+  "signedFeedSHA256": "d6db9fc44192cae9d3cf1d282913ce254df8034c17b0d915c67dbabe7894403a",
+  "productionFeedURL": "https://raw.githubusercontent.com/OfficialSquidProductions/shot-reporter/main/updates/macos/appcast.xml",
+  "verifiedAtUTC": "2026-11-12T08:02:27.124823+00:00"
+}
