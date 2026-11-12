@@ -275,14 +275,14 @@ struct Workspace: View {
                         Button {store.select(doc.0)} label:{Label(doc.1,systemImage:doc.0 == store.slot ? "doc.text.fill" : "doc.text").frame(maxWidth:.infinity,alignment:.leading)}
                         Button(role:.destructive) {do {reportToDelete=try store.deletionRequest(for:doc.0)} catch {store.error=error.localizedDescription}} label:{Label("Delete Report",systemImage:"trash")}
                             .disabled(store.blocked || store.pendingImport)
-                    }
+                    }.buttonStyle(.borderless)
                 }
             }
             if !store.deletedDocuments.isEmpty {
                 Section("Recently Deleted") {
                     Text("Deleted reports stay here until you restore them. Their saved takes and previous snapshots are kept.").font(.caption)
                     ForEach(store.deletedDocuments,id:\.0) {doc in
-                        HStack {Text(doc.1);Spacer();Button("Restore Report") {store.restoreDeletedReport(doc.0)}.disabled(store.blocked || store.pendingImport)}
+                        HStack {Text(doc.1);Spacer();Button("Restore Report") {store.restoreDeletedReport(doc.0)}.disabled(store.blocked || store.pendingImport)}.buttonStyle(.borderless)
                     }
                 }
             }
