@@ -15,7 +15,7 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 - Preview landscape PDFs, export CSV/HTML, and exchange editable `.camreport` files.
 - Start with a blank report or reopen an existing local report.
 
-The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The reporting-only desktop alpha is available in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
+The current source is focused on reporting. The product scope and compatibility safeguards are described in [reporting scope](docs/REPORTING_SCOPE.md). The signed Mac update is available in [release 0.2.0-alpha.8](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.8). The Windows installer remains in [release 0.2.0-alpha.6](https://github.com/OfficialSquidProductions/shot-reporter/releases/tag/v0.2.0-alpha.6).
 
 ## Local saves and imports
 

@@ -116,3 +116,14 @@ A separate exact signed alpha.6/build 9 app copy authenticated a staged signed f
 The accepted signed appcast is now at `updates/macos/appcast.xml` for production Mac delivery. The existing pinned key, channel, archive-host, signed-feed, signature-before-extraction, and save gates remain enabled. Copies without Sparkle/feed support still require a manual bootstrap install. Store/TestFlight builds exclude Sparkle and use their own delivery channel. Windows automatic updates remain gated on a dedicated trusted publisher certificate and successful native signed automatic installation.
 
 Validation: 55 Swift tests and 26 packaging tests passed; the exact release source passed both GitHub desktop development and native Windows candidate workflows. iOS and universal Mac TestFlight version 0.2.0/build 10 uploaded and processed, with only the existing Owner Testing group assigned.
+
+
+## Alpha.8 build 11 signed update acceptance
+
+Mac version 0.2.0-alpha.8, build 11, uses clean application source commit `0991ecf0b165c4db7bef4afcd5f142a22fbc56a3`. It includes the all-responsibilities workspace, suite sidebar branding/icons, bottom Settings/support, and camera/recording settings in Log with carry-forward and Return to defaults.
+
+The Developer ID signed app was notarized, stapled, and Gatekeeper accepted. The published Apple Silicon ZIP SHA-256 is `09e4523c95e44be799788d779ed20ea21cbbbb7dcd81d8a46ce8dbb7518ddc74`. The archive and feed both authenticate with the existing Shot Reporter Sparkle key. An anonymous public download matched those bytes.
+
+An exact signed public build 10 copy authenticated the staged feed, downloaded the public archive through Sparkle, honored cancellation/retry and Keep Working/resume, and installed and automatically relaunched build 11. Every installed bundle file and symlink matched the accepted notarized app. Synthetic report fields, takes, defaults, history, active selection, and the Dark appearance preference survived. The existing no-op focus behavior added one revision on relaunch; the pre-upgrade current snapshot remained byte-for-byte as the recovery snapshot. The owner's installed app was not replaced, and both owner report libraries remained unchanged. Temporary feed preferences and the QA launch environment were restored.
+
+Validation: 56 Swift tests and 26 packaging tests passed at the clean release source; the implementation's Kotlin regressions and native Windows reporting checks had already passed with PR #4. This publication updates the direct Mac Apple Silicon channel only. Windows, Android, and TestFlight downloads remain unchanged. The public release includes checksum and curated validation/acceptance receipts; no private reports or signing credentials are distributed.
