@@ -1,7 +1,20 @@
 import Foundation
 
+func phoneTitleEdit(_ report:Report)->Report {
+    var edited=Report.phoneHandoffEdit(report);edited.values["title"]="Harbor Lights – Renamed on iPhone 🎬";return edited
+}
+func verifyReportTitlePresentation()throws {
+    var report=Report.fullHandoffFixture();let id=report.id,revision=report.revision
+    for title:String? in [nil,"","  \t\n","  Café / カメラ 🎬  "] {
+        report.values["title"]=title;let stored=try Exchange.encoder().encode(report)
+        let expected=(title ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+        guard report.displayTitle==(expected.isEmpty ? "Untitled production":expected),report.id==id,report.revision==revision,try Exchange.encoder().encode(report)==stored else {throw ReportError.invalid("Production title presentation changed report data or blank fallback failed")}
+    }
+}
+
 func assertArchive(_ prepared:ProjectArchive.Prepared,edited:Bool)throws {
-    guard prepared.report == (edited ? Report.phoneHandoffEdit(.fullHandoffFixture()):.fullHandoffFixture()),prepared.snapshot.previous != nil else {throw ReportError.invalid("Full report or previous snapshot mismatch")}
+    try verifyReportTitlePresentation()
+    guard prepared.report == (edited ? phoneTitleEdit(.fullHandoffFixture()):.fullHandoffFixture()),prepared.snapshot.previous != nil else {throw ReportError.invalid("Full report or previous snapshot mismatch")}
     guard let prefs=prepared.snapshot.state.preferences,let dictionary=try PropertyListSerialization.propertyList(from:prefs,format:nil) as? [String:Any],dictionary["theme"] as? String=="Dark",dictionary["opaque"] as? Data==Data([0,255,3]) else {throw ReportError.invalid("Preference snapshot mismatch")}
     guard prepared.snapshot.state.resources.contains(where:{$0.kind=="media" && $0.size>UInt64(Exchange.limit)}),prepared.snapshot.state.resources.contains(where:{$0.kind=="attachment" && $0.name=="照明 – reference.pdf"}),prepared.snapshot.state.resources.contains(where:{$0.kind=="recovery"}) else {throw ReportError.invalid("Missing media, attachment or recovery category")}
     for resource in prepared.snapshot.state.resources {let hash=try ProjectZIP.fingerprint(ProjectArchive.blobURL(prepared.folder,resource.sha256));guard hash.sha256==resource.sha256,hash.size==resource.size else {throw ReportError.invalid("File bytes changed across platforms")}}
@@ -16,10 +29,10 @@ import UIKit
                 let prepared=try ProjectArchive.read(Bundle.main.url(forResource:"complete-project",withExtension:"camreport")!,to:output.appendingPathComponent("files"));try assertArchive(prepared,edited:false)
                 let repo=try Repository(url:output.appendingPathComponent("reports.sqlite3")),slot=UUID().uuidString
                 _=try repo.importProject(prepared.snapshot,slot:slot)
-                let loaded=try repo.load(slot),edited=Report.phoneHandoffEdit(loaded.report)
+                let loaded=try repo.load(slot),edited=phoneTitleEdit(loaded.report)
                 _=try repo.save(slot:slot,report:edited,device:"Native iOS Simulator QA",expectedFingerprint:loaded.fingerprint)
                 let saved=try repo.projectSnapshot(slot)
-                guard saved.state==prepared.snapshot.state,try Exchange.read(saved.previous!).report == Report.fullHandoffFixture() else {throw ReportError.invalid("iOS persistence lost files, preferences or recovery")}
+                guard saved.state==prepared.snapshot.state,try Exchange.read(saved.previous!).report == Report.fullHandoffFixture(),try repo.load(slot).report.displayTitle=="Harbor Lights – Renamed on iPhone 🎬",try repo.load(slot).report.id==loaded.report.id,try Repository(url:output.appendingPathComponent("reports.sqlite3")).load(slot).report.displayTitle=="Harbor Lights – Renamed on iPhone 🎬" else {throw ReportError.invalid("iOS persistence lost files, preferences or recovery")}
                 try ProjectArchive.write(saved,resources:prepared.folder,device:"Native iPhone Simulator QA",to:output.appendingPathComponent("phone-return.camreport"))
                 try Data("PASS native iOS: full model, >32 MiB media, unicode attachment, preferences, recoveries, persistence, edit and export".utf8).write(to:output.appendingPathComponent("PASS.txt"))
             } catch {try? Data(error.localizedDescription.utf8).write(to:output.appendingPathComponent("FAIL.txt"))}

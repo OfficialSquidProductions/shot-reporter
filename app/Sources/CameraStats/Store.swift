@@ -41,14 +41,14 @@ import CameraStatsCore
         } catch { self.error = "Local report could not be read. Its bytes were preserved. Export/recover it before creating a new report. \(error.localizedDescription)"; blocked = true }
     }
     func refresh() {
-        deletedDocuments = ((try? repository?.list(deleted:true)) ?? []).map{($0.slot,$0.title + " · r\($0.revision)")}
-        documents = ((try? repository?.list()) ?? []).map{($0.slot,$0.title + " · r\($0.revision)")}
+        deletedDocuments = ((try? repository?.list(deleted:true)) ?? []).map{($0.slot,Report.displayTitle($0.title) + " · r\($0.revision)")}
+        documents = ((try? repository?.list()) ?? []).map{($0.slot,Report.displayTitle($0.title) + " · r\($0.revision)")}
     }
     func persist(_ next: Report) throws {
         guard let repository else {throw ReportError.invalid("Local database is unavailable; existing files are preserved")}
         let accepted=try repository.save(slot:slot,report:next,device:device,expectedFingerprint:fingerprint)
         report = next; fingerprint=accepted; saved = Date()
-        documents.removeAll{$0.0 == slot}; documents.append((slot,next.values["title",default:"Untitled"] + " · r\(next.revision)")); documents.sort{$0.1 < $1.1}
+        documents.removeAll{$0.0 == slot}; documents.append((slot,next.displayTitle + " · r\(next.revision)")); documents.sort{$0.1 < $1.1}
     }
     func change(_ summary: String = "Edited report", _ action: (inout Report)->Void) {
         guard !blocked,!archiveBusy else { error = "Recovery is required before edits can be accepted."; return }
@@ -68,7 +68,7 @@ import CameraStatsCore
         guard !blocked,!pendingImport,!archiveBusy else {throw ReportError.invalid("Resolve recovery or import before deleting a report.")}
         guard let repository else {throw ReportError.invalid("Local database unavailable")}
         let loaded = try repository.load(id)
-        return DeletionRequest(id:id,title:loaded.report.values["title",default:"Untitled"],fingerprint:loaded.fingerprint)
+        return DeletionRequest(id:id,title:loaded.report.displayTitle,fingerprint:loaded.fingerprint)
     }
     private func adopt(_ loaded:Repository.Loaded) {
         slot=loaded.slot;report=loaded.report;fingerprint=loaded.fingerprint;saved=Date();blocked=false;error=nil;reloadProject()

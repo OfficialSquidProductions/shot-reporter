@@ -174,7 +174,7 @@ struct Workspace: View {
             #if !os(macOS)
             Brand().padding(.horizontal).frame(maxWidth:.infinity,alignment:.leading)
             #endif
-            HStack { Text(store.report.values["title",default:"New production"]).font(.headline).lineLimit(1); Spacer(); Text("r\(store.report.revision)").monospacedDigit().foregroundStyle(.secondary) }.padding(.horizontal).padding(.vertical,8)
+            HStack { Text(store.report.displayTitle).font(.headline).lineLimit(1); Spacer(); Text("r\(store.report.revision)").monospacedDigit().foregroundStyle(.secondary) }.padding(.horizontal).padding(.vertical,8)
             Divider()
             switch d {
             case .today: today
@@ -197,7 +197,8 @@ struct Workspace: View {
         Form {
             Section("Local production") {
                 status
-                Picker("Open report",selection:Binding(get:{store.slot},set:{store.select($0)})) { Text("Current report").tag(store.slot); ForEach(store.documents.filter{$0.0 != store.slot},id:\.0) { doc in Text(doc.1).tag(doc.0) } }
+                Picker("Open report",selection:Binding(get:{store.slot},set:{store.select($0)})) { Text(store.report.displayTitle).tag(store.slot); ForEach(store.documents.filter{$0.0 != store.slot},id:\.0) { doc in Text(doc.1).tag(doc.0) } }
+                Text("Report name follows Production title below.").font(.caption).foregroundStyle(.secondary)
                 Button { store.open(Report()); selected = nil } label: { Label("New blank report",systemImage:"plus").frame(maxWidth:.infinity,minHeight:32) }.buttonStyle(.borderedProminent)
             }
             Section("Production profile") {
@@ -384,7 +385,7 @@ struct Workspace: View {
         NavigationStack {
             List {
                 Section("Complete open report") {
-                    Text(item.report.values["title",default:"Untitled"])
+                    Text(item.report.displayTitle)
                     Text("Revision \(item.report.revision) · \(item.report.entries.count) takes · \(item.manifest.device)")
                     Text("\(item.snapshot.state.resources.filter{$0.kind=="media"}.count) media · \(item.snapshot.state.resources.filter{$0.kind=="attachment"}.count) attachments · \(item.snapshot.state.resources.filter{$0.kind=="recovery"}.count + (item.snapshot.previous == nil ? 0:1)) recovery copies")
                     Text(ByteCountFormatter.string(fromByteCount:Int64(item.totalBytes),countStyle:.file))
@@ -408,7 +409,7 @@ struct Workspace: View {
         let p = item.package; let preview = try? Exchange.preview(local:store.report,incoming:p)
         return NavigationStack {
             List {
-                Section("Incoming report") { Text(p.report.values["title",default:"Untitled"]); Text("Revision \(p.manifest.revision) · \(p.report.active.count) takes · \(p.manifest.device)"); Text("Verified schema, CRCs, SHA-256 and report identity.").font(.caption) }
+                Section("Incoming report") { Text(p.report.displayTitle); Text("Revision \(p.manifest.revision) · \(p.report.active.count) takes · \(p.manifest.device)"); Text("Verified schema, CRCs, SHA-256 and report identity.").font(.caption) }
                 if let preview { Section("Merge preview") { Text(preview.duplicate ? "Already imported — no changes" : "\(preview.additions.count) additions · \(preview.conflicts.count) conflicts"); ForEach(preview.conflicts,id:\.self) { Text($0) }; Button("Merge independent additions") { do { let merged = try Exchange.mergeAdditions(local:store.report,incoming:p,device:store.device); try store.persist(merged); pending = nil } catch { store.error = error.localizedDescription } }.disabled(!preview.conflicts.isEmpty || preview.duplicate) } }
                 else { Text("Different report identity. Merge is unavailable.") }
                 Button("Open as separate editable report") { store.open(p.report); selected = nil; pending = nil }

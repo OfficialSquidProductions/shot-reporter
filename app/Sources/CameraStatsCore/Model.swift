@@ -51,6 +51,12 @@ public struct Report: Codable, Equatable {
     public var namingSettings: NamingSettings?
     public var namingTemplate = "{project}_SC{scene}_TK{take}_CAM-{camera}"
     public init() { values["date"] = ISO8601DateFormatter().string(from: Date()).prefix(10).description }
+    /// Presentation only: the production title remains the single stored source of truth.
+    public var displayTitle:String {Self.displayTitle(values["title"])}
+    public static func displayTitle(_ title:String?)->String {
+        let title=(title ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+        return title.isEmpty ? "Untitled production":title
+    }
     public var productionMode: ProductionMode {
         get { ProductionMode(rawValue:values["productionMode",default:""]) ?? .movie }
         set { values["productionMode"] = newValue.rawValue }
