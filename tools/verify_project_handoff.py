@@ -12,7 +12,7 @@ SIM='/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Res
 def run(cmd,**kw):return subprocess.run(list(map(str,cmd)),check=True,**kw)
 def capture(cmd):return subprocess.check_output(list(map(str,cmd)),text=True,timeout=60).strip()
 runtimes=json.loads(capture([SIM,'list','runtimes','-j']))['runtimes'];runtime=next(r for r in runtimes if r['isAvailable'] and r['name'].startswith('iOS'))
-common=[ROOT/'app/Sources/CameraStatsCore'/n for n in ['Model.swift','NamingSettings.swift','Exchange.swift','Repository.swift','Reports.swift']]
+common=[ROOT/'app/Sources/CameraStatsCore'/n for n in ['Model.swift','NamingSettings.swift','Exchange.swift','ProjectZIP.swift','ProjectArchive.swift','Repository.swift','Reports.swift']]
 fixture=[ROOT/'app/Tests/CameraStatsCoreTests/FullProjectFixture.swift',ROOT/'tools/fixtures/ProjectHandoffProbe.swift']
 base=['xcrun','swiftc','-D','SHOT_REPORTER_FIXTURE_TOOL','-module-cache-path',output/'modules','-I',ROOT/'app/Sources/CSQLite']
 run([*base,*common,*fixture,'-o',output/'handoff-mac'])

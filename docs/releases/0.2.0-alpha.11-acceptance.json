@@ -1,0 +1,117 @@
+{
+  "version": "0.2.0-alpha.11",
+  "build": 14,
+  "sourceCommit": "9e886e43ffa4a860a25db670ad36fb85899a895c",
+  "archiveSHA256": "7221f2f6945e8c167a0db289943026e8136ef8edc7fda5403858fea6456935f3",
+  "developerIDSignedNotarizedStapled": true,
+  "publicAnonymousArchiveVerified": true,
+  "nativeSignedUpgrade": {
+    "from": "Exact public alpha.10 / build 13",
+    "to": "Exact public alpha.11 / build 14",
+    "authenticatedStagedFeedAndArchive": true,
+    "keepWorkingAndResumeViaAppUpdateCommand": true,
+    "saveInstallAndAutomaticRelaunch": true,
+    "automaticRelaunch": true,
+    "installedBundleMatchesEveryNotarizedExportFileAndSymlink": true,
+    "schemaMigration": [
+      3,
+      4
+    ],
+    "allActiveAndDeletedCurrentPreviousBlobsUnchanged": true,
+    "activeSelectionAndRevisionUnchanged": true,
+    "darkPreferenceRetained": true,
+    "temporaryLaunchContextRestored": true
+  },
+  "nativeArchiveUI": {
+    "signedBuild": 14,
+    "result": "PASS",
+    "nativeImportPicker": true,
+    "verifiedPreview": true,
+    "openAsSeparateReport": true,
+    "nativeSavePanelExport": true,
+    "allPayloadCRCAndSHA256Verified": true,
+    "sourceCurrentPreviousAndResourcesUnchanged": true,
+    "sourcePreferencesRetainedAsSnapshot": true,
+    "twoPreexistingSyntheticReportsUnchanged": true,
+    "ownerDataUsed": false
+  },
+  "completeArchiveHandoff": {
+    "result": "PASS",
+    "runtime": "iOS 26.5 26.5",
+    "nativeIOSReadPersistEditExport": true,
+    "nativeMacReadPersistReExport": true,
+    "everyReportModelFieldCompared": true,
+    "allFileSHA256Compared": true,
+    "mediaOver32MiB": true,
+    "unicodeBinaryAttachment": true,
+    "preferencesAndRecoveriesPreserved": true,
+    "fixture": {
+      "cameras": 2,
+      "totalTakes": 6,
+      "activeTakes": 5,
+      "hiddenMovieSeasonEpisode": true,
+      "unicodeAndMultilineNotes": true,
+      "customMapValues": true,
+      "namingSettingsAndLegacyFields": true,
+      "deletedTakeAndHistory": true
+    },
+    "limits": [
+      "Synthetic compiled-core probe, not physical iPhone UI or AirDrop/iCloud delivery",
+      "One complete open report; unrelated saved reports and OS backups are not silently bundled",
+      "Includes explicitly added files; filename text does not grant access to media",
+      "Stored ZIP64, 1 TiB total, 8 MiB metadata, 19,989 resources; available disk space required",
+      "All app-owned preferences retained as archive data; only reviewed appearance/detail preferences applied",
+      "Synthetic 35 MiB media; >4 GiB physical media and real AirDrop remain field checks"
+    ],
+    "usedRealUserData": false
+  },
+  "tests": {
+    "swiftPassed": 79,
+    "packagingPassed": 26,
+    "committedSQLiteSurvivedSIGKILL": true,
+    "legacyNativeHandoff": "PASS"
+  },
+  "ownerData": {
+    "rootsChecked": 2,
+    "allReportAndTrashSnapshotSelectionFingerprintsUnchanged": true,
+    "ownerInstalledAppNotReplaced": true,
+    "noOwnerTrashPurge": true
+  },
+  "productionFeedVerified": true,
+  "productionFeedSHA256": "9a3746f7d4036bf6fdd5a03a4fcafdbaa31426469f8ebe627630c4e6b6227074",
+  "testflight": {
+    "version": "0.2.0",
+    "build": 14,
+    "checkedAtUTC": "2026-11-12T23:10:28.030025+00:00",
+    "group": "Owner Testing",
+    "testerCount": 1,
+    "macOS": {
+      "upload": "success",
+      "status": "Testing",
+      "buildID": "bd0da696-c71d-4256-b530-f36296efae7a",
+      "whatToTestSaved": true,
+      "groupAssigned": true
+    },
+    "iOS": {
+      "upload": "success",
+      "status": "Testing",
+      "buildID": "ffd9ffa1-d3ef-4792-a300-6d2a8f583586",
+      "groupAssigned": true,
+      "phoneAvailabilityVerified": true,
+      "whatToTestSaved": true
+    },
+    "noDuplicateUpload": true,
+    "externalTestersAdded": false,
+    "publicAppStoreSubmission": false,
+    "bothPlatformsTestingVerifiedInExistingGroup": true
+  },
+  "physicalAirDropTest": "Both build 14 platforms are Testing; owner may now perform the real phone/Mac AirDrop test",
+  "limits": [
+    "Complete open report, not unrelated saved reports",
+    "Only explicitly added file bytes and known local recoveries; no arbitrary external path discovery or OS backup scan",
+    "All preferences preserved as data; reviewed appearance/detail only applied",
+    "1 TiB safety cap and available storage; 8 MiB metadata; 19,989 resource references",
+    "Physical iPhone UI, multi-gigabyte throughput and AirDrop delivery not yet verified",
+    "Windows/Android remain on legacy report-data-only format"
+  ]
+}

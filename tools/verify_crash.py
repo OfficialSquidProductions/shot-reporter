@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='camerastats-crash-') as tmp:
     # This probe exercises report persistence, not application crash capture.
     # Keep its dependency closure explicit so unrelated C-backed services do not
     # require their runtime/module when compiling the standalone test process.
-    sources = ['Model.swift', 'NamingSettings.swift', 'Exchange.swift', 'Reports.swift', 'Repository.swift']
+    sources = ['Model.swift', 'NamingSettings.swift', 'Exchange.swift', 'Reports.swift', 'ProjectZIP.swift', 'ProjectArchive.swift', 'Repository.swift']
     command += [str(ROOT/'app/Sources/CameraStatsCore'/name) for name in sources]
     command += [str(ROOT/'app/Tests/CameraStatsCoreTests/LegacyReportFixtures.swift'),str(ROOT/'tools/CrashCommitProbe.swift'),'-o',str(executable)]
     subprocess.run(command,check=True)
