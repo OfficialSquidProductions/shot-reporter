@@ -6,7 +6,7 @@ import CameraStatsCore
 
 final class ReportOnlyTests: XCTestCase {
     func testDestinationsContainOnlyReportingWorkflows() {
-        XCTAssertEqual(Destination.allCases.map(\.rawValue), ["Today", "Log", "Review", "Saves"])
+        XCTAssertEqual(Destination.allCases.map(\.rawValue), ["Today", "Log", "Review", "Saves", "Settings"])
     }
 
     func testAppSourcesHaveNoRemovedWorkflowEntrypoints() throws {

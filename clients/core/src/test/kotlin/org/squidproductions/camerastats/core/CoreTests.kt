@@ -33,6 +33,22 @@ class CoreTests {
         assertEquals("4",updated.active.last().values["take"]);assertEquals("1600",updated.active.last().values["iso"]);assertEquals(old.entries,updated.entries.dropLast(1))
         assertEquals("1",updated.copy(defaults=updated.defaults+("camera" to "B")).next("3A","Test").active.last().values["take"])
     }
+    @Test fun recordingSettingsCarryForwardResetAndRoundtrip() {
+        var report=Report().next("12B","Test")
+        val first=report.entries.first().id
+        report=report.setRecordingSetting("iso","800",first).next("12B","Test")
+        report=report.setRecordingSetting("iso","1600",report.entries.last().id)
+        assertEquals("800",report.entries.first().values["iso"])
+        report=Exchange.read(Exchange.export(report,"Test")).report.next("13","Test")
+        assertEquals("1600",report.entries.last().values["iso"])
+        val recorded=report.entries
+        report=report.returnToDefaults()
+        assertEquals("A",report.defaults["camera"])
+        assertNull(report.defaults["iso"])
+        assertEquals(recorded,report.entries)
+        assertNull(report.next("13","Test").entries.last().values["iso"])
+        assertEquals(report,report.setRecordingSetting("iso","3200","missing"))
+    }
     @Test fun conservativeMergeAndIdempotenceMatchSwift() {
         val base=Exchange.read(fixture()).report;val incoming=Exchange.read(fixture("swift-additions"));val preview=Exchange.preview(base,incoming)
         assertEquals(1,preview.additions.size);assertTrue(preview.conflicts.isEmpty())

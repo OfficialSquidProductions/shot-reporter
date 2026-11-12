@@ -1,5 +1,8 @@
 name: Desktop reporting development checks
 on:
+  pull_request:
+    paths: ['clients/**', '.github/workflows/desktop-reporting-development.yml']
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ['clients/**', '.github/workflows/desktop-reporting-development.yml']

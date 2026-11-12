@@ -11,6 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,57 +86,78 @@ private val Green=Color(0xff237b20)
     var notices by remember {mutableStateOf<String?>(null)}
     MaterialTheme(colorScheme=palette) {
         Surface(Modifier.fillMaxSize(),color=palette.background) {
-            Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
-                    Image(host.brand,null,Modifier.size(38.dp,48.dp));Spacer(Modifier.width(12.dp))
-                    Column {Text("Shot Reporter",fontSize=23.sp,fontWeight=FontWeight.Black);Text("A Squid Productions Software",style=MaterialTheme.typography.labelMedium)}
-                }
-                Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {Text(state.report.values["title"] ?: "New production",Modifier.weight(1f),fontWeight=FontWeight.Bold,maxLines=1);Text("r${state.report.revision}",style=MaterialTheme.typography.labelMedium)}
-                Row(Modifier.fillMaxWidth().padding(8.dp),horizontalArrangement=Arrangement.SpaceEvenly) {
-                    listOf("Today","Log","Review","Saves").forEach { destination ->
-                        if(page==destination) FilledTonalButton(onClick={page=destination},modifier=Modifier.weight(1f).padding(horizontal=2.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=8.dp)) {Text(destination)} else TextButton(onClick={page=destination},modifier=Modifier.weight(1f).padding(horizontal=2.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=8.dp)) {Text(destination)}
+            BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+                val wide=maxWidth>=800.dp
+                Row(Modifier.fillMaxSize()) {
+                    if(wide) Column(Modifier.width(248.dp).fillMaxHeight().background(palette.surface).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        WorkspaceBrand(host)
+                        Text(if(state.blocked) "Recovery required" else state.status,style=MaterialTheme.typography.labelSmall,color=palette.onSurfaceVariant)
+                        HorizontalDivider(Modifier.padding(vertical=12.dp))
+                        listOf("Today","Log","Review","Saves").forEach {destination ->
+                            if(page==destination) FilledTonalButton(onClick={page=destination},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(6.dp)) {WorkspaceLabel(destination)}
+                            else TextButton(onClick={page=destination},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(6.dp)) {WorkspaceLabel(destination)}
+                        }
+                        Spacer(Modifier.weight(1f))
+                        HorizontalDivider()
+                        TextButton(onClick={page="Settings"},modifier=Modifier.fillMaxWidth()) {WorkspaceLabel("Settings")}
                     }
-                }
-                HorizontalDivider()
-                Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.TopCenter) {
-                    Column(Modifier.widthIn(max=1000.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        when(page) {
-                            "Today" -> {
-                                Section("Local production") {
-                                    Text(if(state.blocked) "Recovery required" else state.status,style=MaterialTheme.typography.labelMedium)
-                                    OutlinedButton(onClick={documentPicker=true},enabled=state.documents.isNotEmpty()) {Text("Open report")}
-                                    Button(onClick={state.open(Report())},enabled=!state.blocked,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text("New blank report")}
-                                }
-                                Section("Workspace preferences") {
-                                    Choice("Production profile",state.report.profile,Schema.profiles) {v -> state.change("Changed profile; all values retained") {it.copy(profile=v)}}
-                                    Choice("Detail",detail,listOf("Quick","Standard","Full")) {v -> detail=v;host.preference("detail",v,true)}
-                                    Choice("Appearance",theme,listOf("System","Light","Dark")) {v -> theme=v;host.preference("theme",v,true)}
-                                    Schema.positions.forEach {position -> Check(position,position in state.report.positions) {on -> state.change("Changed responsibility view") {r ->r.copy(positions=if(on) (r.positions+position).distinct() else r.positions-position)}} }
-                                    Text("Positions describe responsibilities. Every report group remains in Review.",style=MaterialTheme.typography.bodySmall)
-                                    TextButton(onClick={state.attempt {notices=host.notices()}}) {Text("Open-source notices")}
-                                }
-                                Section("Project / crew · complete report") {Fields(Schema.project,state.report.values) {k,v ->state.change("Edited project field") {it.copy(values=it.values+(k to v))}} }
-                                Section("Defaults for future takes") {Text("Earlier takes keep their recorded settings.",style=MaterialTheme.typography.bodySmall);Fields(Schema.settings,state.report.defaults) {k,v ->state.change("Changed defaults for future takes") {it.copy(defaults=it.defaults+(k to v))}} }
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        if(!wide) WorkspaceBrand(host)
+                        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {Text(state.report.values["title"] ?: "New production",Modifier.weight(1f),fontWeight=FontWeight.Bold,maxLines=1);Text("r${state.report.revision}",style=MaterialTheme.typography.labelMedium)}
+                        if(!wide) Row(Modifier.fillMaxWidth().padding(8.dp),horizontalArrangement=Arrangement.SpaceEvenly) {
+                            listOf("Today","Log","Review","Saves").forEach { destination ->
+                                if(page==destination) FilledTonalButton(onClick={page=destination},modifier=Modifier.weight(1f).padding(horizontal=2.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=8.dp)) {Text(destination)} else TextButton(onClick={page=destination},modifier=Modifier.weight(1f).padding(horizontal=2.dp),contentPadding=PaddingValues(horizontal=4.dp,vertical=8.dp)) {Text(destination)}
                             }
-                            "Log" -> LogScreen(state,detail,{v ->detail=v;host.preference("detail",v,true)})
-                            "Review" -> ReviewScreen(state)
-                            "Saves" -> {
-                                Section("Report handoff") {
-                                    Text(state.status);state.lastExport?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
-                                    Button(onClick={state.export("camreport")}) {Text("Save As .camreport")}
-                                    OutlinedButton(onClick={state.importReport()}) {Text("Import Save…")}
-                                    Text("Schema 1 alpha: complete reports only. Import previews additions and competing edits; save is not proof of receipt.",style=MaterialTheme.typography.bodySmall)
-                                    TextButton(onClick={state.previous()},enabled=!state.blocked) {Text("Restore previous snapshot separately")}
-                                }
-                                Section("Preview and export") {
-                                    Button(onClick={state.export("pdf")}) {Text("Save landscape Camera Report PDF")}
-                                    OutlinedButton(onClick={state.export("csv")}) {Text("Export CSV")}
-                                    OutlinedButton(onClick={state.export("html")}) {Text("Export HTML report")}
-                                    Text("PDF is a frozen draft/ready report. CSV and HTML are generic report exports.",style=MaterialTheme.typography.bodySmall)
+                        }
+                        HorizontalDivider()
+                        Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.TopCenter) {
+                            Column(Modifier.widthIn(max=1000.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                                when(page) {
+                                    "Today" -> {
+                                        Section("Local production") {
+                                            Text(if(state.blocked) "Recovery required" else state.status,style=MaterialTheme.typography.labelMedium)
+                                            OutlinedButton(onClick={documentPicker=true},enabled=state.documents.isNotEmpty()) {Text("Open report")}
+                                            Button(onClick={state.open(Report())},enabled=!state.blocked,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text("New blank report")}
+                                        }
+                                        Section("Production profile") {
+                                            Choice("Production profile",state.report.profile,Schema.profiles) {v -> state.change("Changed profile; all values retained") {it.copy(profile=v)}}
+                                        }
+                                        Section("Project / crew · complete report") {Fields(Schema.project,state.report.values) {k,v ->state.change("Edited project field") {it.copy(values=it.values+(k to v))}} }
+                                    }
+                                    "Settings" -> {
+                                        Section("Appearance") {
+                                            Choice("Appearance",theme,listOf("System","Light","Dark")) {v -> theme=v;host.preference("theme",v,true)}
+                                        }
+                                        Section("Support & about") {
+                                            TextButton(onClick={state.attempt {notices=host.notices()}}) {Text("Open-source notices")}
+                                            Text("All camera, DP, data, and script / continuity responsibilities are always available.")
+                                            Text("${host.releaseLabel} · ${host.label}",style=MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                    "Log" -> LogScreen(state,detail,{v ->detail=v;host.preference("detail",v,true)})
+                                    "Review" -> ReviewScreen(state)
+                                    "Saves" -> {
+                                        Section("Report handoff") {
+                                            Text(state.status);state.lastExport?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
+                                            Button(onClick={state.export("camreport")}) {Text("Save As .camreport")}
+                                            OutlinedButton(onClick={state.importReport()}) {Text("Import Save…")}
+                                            Text("Schema 1 alpha: complete reports only. Import previews additions and competing edits; save is not proof of receipt.",style=MaterialTheme.typography.bodySmall)
+                                            TextButton(onClick={state.previous()},enabled=!state.blocked) {Text("Restore previous snapshot separately")}
+                                        }
+                                        Section("Preview and export") {
+                                            Button(onClick={state.export("pdf")}) {Text("Save landscape Camera Report PDF")}
+                                            OutlinedButton(onClick={state.export("csv")}) {Text("Export CSV")}
+                                            OutlinedButton(onClick={state.export("html")}) {Text("Export HTML report")}
+                                            Text("PDF is a frozen draft/ready report. CSV and HTML are generic report exports.",style=MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
                                 }
                             }
                         }
-                        Text("${host.releaseLabel} · ${host.label} · Saved on your device",style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(vertical=12.dp))
+                        if(!wide) {
+                            HorizontalDivider()
+                            TextButton(onClick={page="Settings"},modifier=Modifier.fillMaxWidth().padding(8.dp)) {WorkspaceLabel("Settings")}
+                        }
                     }
                 }
             }
@@ -155,6 +179,34 @@ private val Green=Color(0xff237b20)
     }
 }
 
+@Composable private fun WorkspaceBrand(host:PlatformGateway) {
+    Row(Modifier.fillMaxWidth().padding(vertical=16.dp,horizontal=8.dp),verticalAlignment=Alignment.CenterVertically) {
+        Image(host.brand,null,Modifier.size(44.dp,66.dp));Spacer(Modifier.width(12.dp))
+        Column {
+            Text("SHOT\nREPORTER",fontSize=18.sp,fontWeight=FontWeight.Bold,letterSpacing=0.6.sp)
+            Text("A Squid Productions™ Software",fontSize=9.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+@Composable private fun WorkspaceLabel(destination:String) {
+    val color=LocalContentColor.current
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        Canvas(Modifier.size(18.dp)) {
+            val data=when(destination) {
+                "Today" -> "M3 3H10V10H3ZM14 3H21V10H14ZM3 14H10V21H3ZM14 14H21V21H14Z"
+                "Log" -> "M3 3H21V21H3ZM8 8H17M8 12H17M8 16H17"
+                "Review" -> "M9 5H21M9 12H21M9 19H21M2 4L4 6L7 2M2 11L4 13L7 9M2 18L4 20L7 16"
+                "Saves" -> "M3 14L6 4H18L21 14V20H3ZM3 14H21M16 17H18"
+                else -> "M9 2H15L16 6L20 7L22 12L20 17L16 18L15 22H9L8 18L4 17L2 12L4 7L8 6ZM9 12A3 3 0 1 0 15 12A3 3 0 1 0 9 12"
+            }
+            scale(size.width/24f,size.height/24f,pivot=androidx.compose.ui.geometry.Offset.Zero) {
+                drawPath(PathParser().parsePathString(data).toPath(),color,style=Stroke(width=1.6f))
+            }
+        }
+        Text(destination)
+    }
+}
+
 @Composable private fun Section(title:String,content:@Composable ColumnScope.()->Unit) {
     Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);content()}}
 }
@@ -169,13 +221,20 @@ private val Green=Color(0xff237b20)
     Column {Text(label,style=MaterialTheme.typography.labelMedium);Box {OutlinedButton(onClick={expanded=true}) {Text(value)};DropdownMenu(expanded,{expanded=false}) {options.forEach {option ->DropdownMenuItem(text={Text(option)},onClick={change(option);expanded=false})}}}}
 }
 @Composable private fun LogScreen(state:AppState,detail:String,changeDetail:(String)->Unit) {
-    var scene by remember {mutableStateOf("")};var picking by remember {mutableStateOf(false)};var search by remember {mutableStateOf("")};var circles by remember {mutableStateOf(false)}
+    var showSettings by remember(state.slot) {mutableStateOf(true)}
+    var scene by remember(state.slot) {mutableStateOf("")};var picking by remember {mutableStateOf(false)};var search by remember {mutableStateOf("")};var circles by remember {mutableStateOf(false)}
     Section("Camera ${state.report.defaults["camera"].orEmpty()} · ${state.report.defaults["roll"].orEmpty()}") {
         Editor("Scene for next take",scene) {scene=it}
-        Button(onClick={state.next(scene)},enabled=scene.isNotBlank()&&!state.blocked,modifier=Modifier.fillMaxWidth()) {Text("Next take")}
-        Row {TextButton(onClick={scene="";state.selected=null}) {Text("New setup")};TextButton(onClick={state.change("Reload: fresh load identity") {it.copy(defaults=it.defaults+("load" to identity()))}}) {Text("Reload")}}
-        Text("Next take inherits current defaults. Reload creates a fresh load ID; enter the new roll and mag in Today before logging.",style=MaterialTheme.typography.bodySmall)
+        Button(onClick={state.next(scene);if(state.selected!=null) showSettings=false},enabled=scene.isNotBlank()&&!state.blocked,modifier=Modifier.fillMaxWidth()) {Text("Next take")}
+        Row {TextButton(onClick={scene="";state.selected=null;showSettings=true}) {Text("New setup")};TextButton(onClick={state.change("Reload: fresh load identity") {it.copy(defaults=it.defaults+mapOf("load" to identity(),"roll" to "","mag" to ""))}}) {Text("Reload")}}
+        Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new roll and mag here before logging.",style=MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick={picking=true}) {Text(state.report.entries.firstOrNull {it.id==state.selected && !it.deleted}?.let {"${it.values["scene"]} / ${it.values["take"]} · ${it.values["camera"]} ${it.values["roll"]}"} ?: "Choose take")}
+    }
+    Section("Camera & recording · next take") {
+        Text("Settings carry forward until you edit them or return to app defaults. Earlier takes keep their recorded values.",style=MaterialTheme.typography.bodySmall)
+        TextButton(onClick={state.change("Returned next-take settings to app defaults") {it.returnToDefaults()}},enabled=!state.blocked) {Text("Return to defaults")}
+        TextButton(onClick={showSettings=!showSettings}) {Text(if(showSettings) "Hide recording details" else "Edit recording details")}
+        if(showSettings) Fields(Schema.settings,state.report.defaults) {k,v ->state.change("Changed settings for next takes") {it.setRecordingSetting(k,v)}}
     }
     val entry=state.report.entries.firstOrNull {it.id==state.selected && !it.deleted}
     if(entry!=null) Section("Scene ${entry.values["scene"]} · Take ${entry.values["take"]}") {
@@ -183,9 +242,9 @@ private val Green=Color(0xff237b20)
         Schema.flags.chunked(2).forEach {pair ->Row {pair.forEach {flag ->FilterChip(selected=flag in entry.flags,onClick={state.entry(entry.id,"Changed take flag") {it.copy(flags=(if(flag in it.flags) it.flags-flag else it.flags+flag).sorted(),reviewed=false)}},label={Text(flag)},modifier=Modifier.padding(end=8.dp))}} }
         val takeFields=if(detail=="Quick") Schema.take.take(3) else Schema.take
         Fields(takeFields,entry.values) {k,v ->state.entry(entry.id,"Edited take field") {it.copy(values=it.values+(k to v),reviewed=false)}}
-        Text("Recorded settings · edit this take only",style=MaterialTheme.typography.titleSmall)
+        Text("Recorded settings · changes also carry forward",style=MaterialTheme.typography.titleSmall)
         val settings=if(detail=="Full") Schema.settings else Schema.settings.filter {it.id in listOf("camera","roll","iso","temperature","lens","stop")}
-        Fields(settings,entry.values) {k,v ->state.entry(entry.id,"Edited take settings") {it.copy(values=it.values+(k to v),reviewed=false)}}
+        Fields(settings,entry.values) {k,v ->state.change("Edited take settings and carried forward") {it.setRecordingSetting(k,v,entry.id)}}
         Check("Reviewed by me",entry.reviewed) {on ->state.entry(entry.id,"Changed self-review") {it.copy(reviewed=on)}}
         TextButton(onClick={state.entry(entry.id,"Removed take (recoverable)") {it.copy(deleted=true)};state.selected=null}) {Text("Remove take (recoverable)")}
         Text(state.status,style=MaterialTheme.typography.labelSmall)

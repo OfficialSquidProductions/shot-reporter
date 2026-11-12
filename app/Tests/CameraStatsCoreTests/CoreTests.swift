@@ -28,6 +28,31 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(r.entries[0].values,old); XCTAssertEqual(r.entries.last?.values["iso"],"1600"); XCTAssertEqual(r.entries.last?.values["take"],"4")
         r.defaults["camera"] = "B"; _ = r.next(scene:"12B",device:"Test"); XCTAssertEqual(r.entries.last?.values["take"],"1")
     }
+    func testRecordingSettingsCarryForwardResetAndRoundtrip() throws {
+        var report = Report()
+        let first = report.next(scene:"12B",device:"Test")
+        report.setRecordingSetting("iso",value:"800",takeID:first)
+        report.entries[0].reviewed = true
+        let second = report.next(scene:"12B",device:"Test")
+        report.setRecordingSetting("iso",value:"1600",takeID:second)
+        XCTAssertEqual(report.entries[0].values["iso"],"800")
+        XCTAssertTrue(report.entries[0].reviewed)
+        XCTAssertFalse(report.entries[1].reviewed)
+        report = try Exchange.read(Exchange.export(report,device:"Test")).report
+        _ = report.next(scene:"13",device:"Test")
+        XCTAssertEqual(report.entries.last?.values["iso"],"1600")
+        let recorded = report.entries
+        report.returnToDefaults()
+        XCTAssertEqual(report.defaults["camera"],"A")
+        XCTAssertEqual(report.defaults["playbackRate"],"24000/1001")
+        XCTAssertNil(report.defaults["iso"])
+        XCTAssertEqual(report.entries,recorded)
+        _ = report.next(scene:"13",device:"Test")
+        XCTAssertNil(report.entries.last?.values["iso"])
+        let unchanged = report
+        report.setRecordingSetting("iso",value:"3200",takeID:"missing")
+        XCTAssertEqual(report,unchanged)
+    }
     func testPortableArchiveAndIntegrity() throws {
         var r = Report.fixture(); r.entries[0].flags = ["MOS","Circle","Tail slate"]
         let data = try Exchange.export(r,device:"Test")
