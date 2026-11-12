@@ -1,0 +1,111 @@
+{
+  "version": "0.2.0-alpha.12",
+  "build": 15,
+  "sourceCommit": "37cade93f7872773b2d9ec637a24d465a9955ee6",
+  "archiveSHA256": "1ccb81d3f5f7ad9d54b6e54d5878063c50c42922d692bf98fd3c4ae560f20077",
+  "developerIDSignedNotarizedStapled": true,
+  "publicAnonymousArchiveVerified": true,
+  "nativeSignedUpgrade": {
+    "from": "Exact public alpha.11 / build 14",
+    "to": "Exact public alpha.12 / build 15",
+    "authenticatedStagedFeedAndArchive": true,
+    "saveInstallAndAutomaticRelaunch": true,
+    "automaticRelaunch": true,
+    "installedBundleMatchesEveryNotarizedFileAndSymlink": true,
+    "localSchemaUnchanged": 4,
+    "allSavedAndDeletedReportsAndCurrentPreviousBlobsUnchanged": true,
+    "deletionDatesTokensCatalogsAndSelectionUnchanged": true,
+    "darkPreferenceRetained": true,
+    "temporaryLaunchContextRestored": true
+  },
+  "nativeReportTitleUI": {
+    "build": 15,
+    "result": "PASS",
+    "existingProductionTitleShownAfterUpgrade": true,
+    "liveUnicodeRenameUpdatesPickerAndHeader": true,
+    "whitespaceOnlyTitleShowsUntitledProduction": true,
+    "savesUsesSameFallback": true,
+    "normalRevisionsCreated": 3,
+    "reportIDAndLocalSlotUnchanged": true,
+    "allOtherReportFieldsAndNamingTemplatesUnchanged": true,
+    "previousSnapshotRetained": true,
+    "unrelatedTrashUnchanged": true,
+    "usedRealUserData": false,
+    "renamePersistsAfterNativeAppRestart": true
+  },
+  "nativeIOSMacArchiveRoundTrip": {
+    "result": "PASS",
+    "runtime": "iOS 26.5 26.5",
+    "nativeIOSReadPersistEditExport": true,
+    "nativeMacReadPersistReExport": true,
+    "everyReportModelFieldCompared": true,
+    "productionTitleRenamedOnNativeIOSAndPreservedOnMac": true,
+    "blankTitleFallbackWithoutMutation": true,
+    "allFileSHA256Compared": true,
+    "mediaOver32MiB": true,
+    "unicodeBinaryAttachment": true,
+    "preferencesAndRecoveriesPreserved": true,
+    "fixture": {
+      "cameras": 2,
+      "totalTakes": 6,
+      "activeTakes": 5,
+      "hiddenMovieSeasonEpisode": true,
+      "unicodeAndMultilineNotes": true,
+      "customMapValues": true,
+      "namingSettingsAndLegacyFields": true,
+      "deletedTakeAndHistory": true
+    },
+    "limits": [
+      "Synthetic compiled-core probe, not physical iPhone UI or AirDrop/iCloud delivery",
+      "One complete open report; unrelated saved reports and OS backups are not silently bundled",
+      "Includes explicitly added files; filename text does not grant access to media",
+      "Stored ZIP64, 1 TiB total, 8 MiB metadata, 19,989 resources; available disk space required",
+      "All app-owned preferences retained as archive data; only reviewed appearance/detail preferences applied",
+      "Synthetic 35 MiB media; >4 GiB physical media and real AirDrop remain field checks"
+    ],
+    "usedRealUserData": false
+  },
+  "tests": {
+    "swiftPassed": 82,
+    "packagingPassed": 26
+  },
+  "ownerData": {
+    "rootsChecked": 2,
+    "reportTrashSnapshotAndSelectionFingerprintsUnchanged": true,
+    "ownerInstalledAppNotReplaced": true,
+    "noOwnerTrashPurge": true
+  },
+  "productionFeedVerified": true,
+  "productionFeedSHA256": "927bfe90c437c3b8083cab6980cca0f3c19e26fbbaf6588357cab4131d87512b",
+  "testflight": {
+    "version": "0.2.0",
+    "build": 15,
+    "checkedAtUTC": "2026-11-12T23:55:09.775548+00:00",
+    "group": "Owner Testing",
+    "testerCount": 1,
+    "macOS": {
+      "upload": "success",
+      "status": "Testing",
+      "buildID": "44f80cdf-02bf-4e02-bc55-212dba122c5f",
+      "whatToTestSaved": true,
+      "groupAssigned": true
+    },
+    "iOS": {
+      "upload": "success",
+      "status": "Testing",
+      "buildID": "c6b209db-e6d5-4a30-a906-0e3f744ba3cf",
+      "groupAssigned": true,
+      "phoneAvailabilityVerified": true,
+      "whatToTestSaved": true
+    },
+    "externalTestersAdded": false,
+    "publicAppStoreSubmission": false,
+    "noDuplicateUpload": true,
+    "bothPlatformsTestingVerifiedInExistingGroup": true
+  },
+  "limits": [
+    "Physical iPhone UI and AirDrop delivery remain field checks",
+    "Windows/Android binaries unchanged; legacy report-only export remains available"
+  ],
+  "existingTrashPolicy": "14-day cleanup remains active; no owner report or trash was purged during development/testing"
+}

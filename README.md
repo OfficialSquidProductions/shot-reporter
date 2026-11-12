@@ -13,7 +13,7 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 - Open appearance and support from Settings at the bottom of the sidebar or tab bar.
 - Check missing fields and self-review the report before handoff.
 - Preview landscape PDFs, export CSV/HTML, and exchange editable `.camreport` files.
-- Start with a blank report or reopen an existing local report.
+- Start with a blank report or reopen an existing local report. Edit Production title in Today to name it; the picker, header and saved-report label follow the title. Blank titles display “Untitled production.”
 - Delete unneeded reports in Saves and restore them from Recently Deleted.
 - Choose Movie (default) or TV in Settings for each report. TV shows Season and Episode; switching modes keeps their values. Digital reports omit camera roll/reel.
 
@@ -43,6 +43,6 @@ The Android/Windows clients share a Kotlin/JVM report engine and Compose screens
 
 ## Validation and releases
 
-Mac 0.2.0-alpha.11/build 14 is published for Apple Silicon on macOS 14+, Developer ID signed, notarized and stapled. Its authenticated production Sparkle feed is live. A real public alpha.10 → alpha.11 install and automatic relaunch preserved active/deleted reports and current/previous snapshots through SQLite schema 3 → 4 migration. Native signed Mac import/save UI and Mac → iOS Simulator → Mac complete-archive tests passed; 79 Swift tests and 26 packaging checks passed. iPhone and universal Mac TestFlight 0.2.0/build 14 are Testing in the existing one-person Owner Testing group, with transfer instructions saved. Physical iPhone UI and AirDrop remain owner field checks. Windows/Android binaries are unchanged and use the legacy report-data-only format.
+Mac 0.2.0-alpha.12/build 15 is published for Apple Silicon on macOS 14+, Developer ID signed, notarized and stapled. Its authenticated production Sparkle feed is live. A real public alpha.11 → alpha.12 install and automatic relaunch preserved all active/deleted reports and current/previous snapshots without a database schema change. The exact signed Mac UI passed live title changes, blank-title fallback and persistence after restart. Native iOS Simulator/Mac rename and complete-archive tests passed; 82 Swift tests and 26 packaging checks passed. iPhone and universal Mac TestFlight 0.2.0/build 15 are Testing in the existing one-person Owner Testing group, with test instructions saved. Physical iPhone UI and AirDrop remain owner field checks. Windows/Android binaries are unchanged and use the legacy report-data-only format.
 
 Physical device/field testing, a 12-hour offline day, low-storage/power-loss checks, full conflict resolution, and exact supplied report-form parity remain open. See [requirements](docs/REQUIREMENTS.md), [validation history](docs/VALIDATION.md), and [release checklist](docs/RELEASE.md). Source is MIT licensed; third-party components retain their licenses, and the supplied SP mark remains unchanged.
