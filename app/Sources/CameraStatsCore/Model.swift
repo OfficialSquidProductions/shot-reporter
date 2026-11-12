@@ -54,6 +54,17 @@ public struct Report: Codable, Equatable {
         var snapshot = defaults; snapshot["scene"] = scene; snapshot["take"] = String(n+1)
         let entry = Entry(values:snapshot); entries.append(entry); record("Added scene \(scene), take \(n+1), camera \(camera)", device:device); return entry.id
     }
+    // Current logging settings are persisted in the existing defaults map for schema-1 compatibility.
+    public mutating func setRecordingSetting(_ key: String, value: String, takeID: String? = nil) {
+        guard Schema.settings.contains(where: { $0.id == key }) else { return }
+        if let takeID {
+            guard let index = entries.firstIndex(where: { $0.id == takeID && !$0.deleted }) else { return }
+            entries[index].values[key] = value
+            entries[index].reviewed = false
+        }
+        defaults[key] = value
+    }
+    public mutating func returnToDefaults() { defaults = Report().defaults }
     public var missing: [String] {
         var result: [String] = []
         let required = ["title","date","director","dp","dit"] + (profile == Schema.profiles[0] ? ["cycle","professor"] : [])

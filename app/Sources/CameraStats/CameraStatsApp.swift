@@ -36,21 +36,25 @@ struct ExportFile: FileDocument {
 }
 struct Brand: View {
     var body: some View {
-        HStack(spacing:12) {
-            Image("SPMark").resizable().scaledToFit().frame(width:36,height:48).accessibilityHidden(true)
-            VStack(alignment:.leading,spacing:3) { Text("Shot Reporter").font(.system(.title2,design:.rounded,weight:.heavy)); Text("A Squid Productions Software").font(.caption).foregroundStyle(.secondary) }
-        }.padding(.vertical,8).accessibilityElement(children:.combine)
+        HStack(alignment:.center,spacing:12) {
+            Image("SPMark").resizable().scaledToFit().frame(width:44,height:66).accessibilityHidden(true)
+            VStack(alignment:.leading,spacing:5) {
+                Text("SHOT\nREPORTER").font(.custom("Futura-Medium",size:18)).tracking(0.6).fixedSize(horizontal:false,vertical:true)
+                Text("A Squid Productions™ Software").font(.system(size:9)).foregroundStyle(.secondary)
+            }
+        }.padding(.vertical,16).accessibilityElement(children:.combine)
     }
 }
 enum Destination: String, CaseIterable, Identifiable {
-    case today = "Today", log = "Log", review = "Review", saves = "Saves"
+    case today = "Today", log = "Log", review = "Review", saves = "Saves", settings = "Settings"
     var id:String { rawValue }
     var icon:String {
         switch self {
-        case .today:return "sun.max"
+        case .today:return "square.grid.2x2"
         case .log:return "list.bullet.rectangle"
         case .review:return "checklist"
         case .saves:return "externaldrive"
+        case .settings:return "gearshape"
         }
     }
 }
@@ -70,6 +74,7 @@ struct Workspace: View {
     @State private var circleOnly = false
     @AppStorage("detail") private var detail = "Standard"
     @State private var scene = ""
+    @State private var showRecordingSettings = true
     @State private var pdfPreview: PDFReview?
     @State private var showingSupport=false
     private var diagnostics:DiagnosticsCenter {DiagnosticsCenter.shared}
@@ -78,9 +83,28 @@ struct Workspace: View {
         Group {
             #if os(macOS)
             NavigationSplitView {
-                Brand().padding(.horizontal)
-                List(Destination.allCases,selection:$destination) { d in Label(d.rawValue,systemImage:d.icon).tag(d) }
-                VStack(alignment:.leading) { Text("LOCAL DESKTOP ALPHA 0.2").font(.caption.bold()); Text("\(store.report.values["title",default:"Untitled"]) · r\(store.report.revision)").font(.caption); status }.padding()
+                VStack(spacing:0) {
+                    Brand().padding(.horizontal,18).frame(maxWidth:.infinity,alignment:.leading)
+                    status.padding(.horizontal,18).padding(.bottom,18).frame(maxWidth:.infinity,alignment:.leading)
+                    Divider()
+                    ScrollView {
+                        VStack(spacing:4) {
+                            ForEach(Destination.allCases.filter { $0 != .settings }) { d in
+                                Button { destination = d } label: {
+                                    Label(d.rawValue,systemImage:d.icon).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,12).padding(.vertical,10).contentShape(Rectangle())
+                                }.buttonStyle(.plain)
+                                    .foregroundStyle(destination == d ? Color("AccentColor") : Color.primary)
+                                    .background(destination == d ? Color("AccentColor").opacity(0.12) : Color.clear,in:RoundedRectangle(cornerRadius:6))
+                                    .accessibilityAddTraits(destination == d ? .isSelected : [])
+                            }
+                        }.padding(10)
+                    }
+                    Divider()
+                    Button { destination = .settings } label: {
+                        Label("Settings",systemImage:"gearshape").frame(maxWidth:.infinity,alignment:.leading).padding(16).contentShape(Rectangle())
+                    }.buttonStyle(.plain).foregroundStyle(destination == .settings ? Color("AccentColor") : Color.secondary)
+                }.background(Color("Paper"))
+                .navigationSplitViewColumnWidth(min:230,ideal:260,max:320)
             } detail: { content(destination ?? .today) }
             #else
             TabView(selection:$tab) {
@@ -89,6 +113,8 @@ struct Workspace: View {
             #endif
         }.tint(Color("AccentColor")).preferredColorScheme(scheme).background(Color("Canvas"))
         .onOpenURL { readImport($0) }
+        .onChange(of:selected) { _,value in showRecordingSettings = value == nil }
+        .onChange(of:store.slot) { _,_ in selected = nil; scene = ""; showRecordingSettings = true }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for:.reportBugRequested)) {_ in showingSupport=true}
         #endif
@@ -115,13 +141,14 @@ struct Workspace: View {
             #if !os(macOS)
             Brand().padding(.horizontal).frame(maxWidth:.infinity,alignment:.leading)
             #endif
-            HStack { Text(store.report.values["title",default:"New production"]).font(.headline).lineLimit(1); Spacer(); Text("r\(store.report.revision)").monospacedDigit().foregroundStyle(.secondary); Button {showingSupport=true} label:{Label("Report a Bug",systemImage:"ladybug")} }.padding(.horizontal).padding(.vertical,8)
+            HStack { Text(store.report.values["title",default:"New production"]).font(.headline).lineLimit(1); Spacer(); Text("r\(store.report.revision)").monospacedDigit().foregroundStyle(.secondary) }.padding(.horizontal).padding(.vertical,8)
             Divider()
             switch d {
             case .today: today
             case .log: log
             case .review: review
             case .saves: saves
+            case .settings: settings
             }
         }.navigationTitle(d.rawValue).background(Color("Canvas"))
         #if !os(macOS)
@@ -130,30 +157,54 @@ struct Workspace: View {
     }
     var status: some View { Label(store.blocked ? "Recovery required" : store.saved == nil ? "Create a local report to begin" : "Saved on this device",systemImage:store.blocked ? "exclamationmark.triangle" : "checkmark.circle").font(.caption).foregroundStyle(.secondary) }
     func projectBinding(_ key:String) -> Binding<String> { Binding(get:{store.report.values[key,default:""]},set:{v in store.change { $0.values[key] = v }}) }
-    func defaultBinding(_ key:String) -> Binding<String> { Binding(get:{store.report.defaults[key,default:""]},set:{v in store.change("Changed defaults for future takes") { $0.defaults[key] = v }}) }
-    func entryBinding(_ id:String,_ key:String) -> Binding<String> { Binding(get:{store.report.entries.first{$0.id == id}?.values[key] ?? ""},set:{v in store.change { r in if let i = r.entries.firstIndex(where:{$0.id == id}) { r.entries[i].values[key] = v; r.entries[i].reviewed = false } }}) }
+    func defaultBinding(_ key:String) -> Binding<String> { Binding(get:{store.report.defaults[key,default:""]},set:{v in store.change("Changed settings for next takes") { $0.setRecordingSetting(key,value:v) }}) }
+    func entryBinding(_ id:String,_ key:String) -> Binding<String> { Binding(get:{store.report.entries.first{$0.id == id}?.values[key] ?? ""},set:{v in store.change { r in if let i = r.entries.firstIndex(where:{$0.id == id}) { if Schema.settings.contains(where: { $0.id == key }) { r.setRecordingSetting(key,value:v,takeID:id) } else { r.entries[i].values[key] = v; r.entries[i].reviewed = false } } }}) }
     func field(_ f:Field,_ binding:Binding<String>) -> some View { VStack(alignment:.leading,spacing:4) { Text(f.title).font(.caption).foregroundStyle(.secondary); TextField(f.title,text:binding,axis:f.id.lowercased().contains("notes") || f.id == "remarks" ? .vertical : .horizontal).textFieldStyle(.roundedBorder).accessibilityLabel(f.title) }.padding(.vertical,2) }
     var today: some View {
         Form {
-            Section("Support") {
-                Button("Report a Bug") {showingSupport=true}
-                if diagnostics.hasPreviousTermination {Text(diagnostics.incidents.contains {$0.kind == .crash} ? "A crash from a previous launch was captured locally." : "The previous session ended unexpectedly; a crash is not confirmed."); Button("Review previous launch diagnostics") {showingSupport=true};Button("Dismiss previous diagnostics") {diagnostics.dismiss()}}
-            }
             Section("Local production") {
                 status
                 Picker("Open report",selection:Binding(get:{store.slot},set:{store.select($0)})) { Text("Current report").tag(store.slot); ForEach(store.documents.filter{$0.0 != store.slot},id:\.0) { doc in Text(doc.1).tag(doc.0) } }
                 Button { store.open(Report()); selected = nil } label: { Label("New blank report",systemImage:"plus").frame(maxWidth:.infinity,minHeight:32) }.buttonStyle(.borderedProminent)
             }
-            Section("Workspace preferences") {
+            Section("Production profile") {
                 Picker("Production profile",selection:Binding(get:{store.report.profile},set:{v in store.change("Changed profile; all values retained"){$0.profile = v}})) { ForEach(Schema.profiles,id:\.self) { Text($0) } }
-                Picker("Detail",selection:$detail) { ForEach(["Quick","Standard","Full"],id:\.self) { Text($0) } }
-                ForEach(Schema.positions,id:\.self) { p in Toggle(p,isOn:Binding(get:{store.report.positions.contains(p)},set:{on in store.change("Changed local position view") { r in if on { if !r.positions.contains(p) {r.positions.append(p)} } else {r.positions.removeAll{$0 == p}} }})) }
-                Text("Positions describe responsibilities. This alpha shows all report groups; every requirement remains in Review.").font(.caption)
-                Picker("Appearance",selection:$theme) { ForEach(["System","Light","Dark"],id:\.self) { Text($0) } }
             }
             Section("Project / crew · complete report") { ForEach(Schema.project) { f in field(f,projectBinding(f.id)) } }
-            Section("Defaults · snapshot when a new take is created") { ForEach(Schema.settings) { f in field(f,defaultBinding(f.id)) }; Text("Editing defaults affects future takes. Existing takes keep their recorded settings.").font(.caption) }
         }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
+    }
+    var settings: some View {
+        Form {
+            Section("Appearance") {
+                Picker("Appearance",selection:$theme) { ForEach(["System","Light","Dark"],id:\.self) { Text($0) } }
+            }
+            Section("Support") {
+                Button("Report a Bug") {showingSupport=true}
+                if diagnostics.hasPreviousTermination {Text(diagnostics.incidents.contains {$0.kind == .crash} ? "A crash from a previous launch was captured locally." : "The previous session ended unexpectedly; a crash is not confirmed."); Button("Review previous launch diagnostics") {showingSupport=true};Button("Dismiss previous diagnostics") {diagnostics.dismiss()}}
+            }
+            Section("About") {
+                Text("Shot Reporter").font(.headline)
+                Text("A Squid Productions™ Software").foregroundStyle(.secondary)
+                Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2")").font(.caption)
+                Text("All camera, DP, data, and script / continuity responsibilities are always available.").font(.caption)
+            }
+        }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
+    }
+    var recordingSettings: some View {
+        VStack(alignment:.leading,spacing:12) {
+            HStack {
+                Label("Camera & recording",systemImage:"camera").font(.headline)
+                Spacer()
+                Button("Return to defaults") { store.change("Returned next-take settings to app defaults") { $0.returnToDefaults() } }
+                    .disabled(store.blocked)
+            }
+            Text("These settings carry forward to each new take until you edit them or return to app defaults. Earlier takes keep their recorded values.").font(.caption).foregroundStyle(.secondary)
+            DisclosureGroup("Camera, media, recording & lens details",isExpanded:$showRecordingSettings) {
+                LazyVGrid(columns:[GridItem(.adaptive(minimum:240),alignment:.topLeading)],alignment:.leading,spacing:12) {
+                    ForEach(Schema.settings) { f in field(f,defaultBinding(f.id)) }
+                }.padding(.top,8)
+            }
+        }.padding(16).background(Color("Paper"),in:RoundedRectangle(cornerRadius:12))
     }
     var log: some View {
         ScrollView {
@@ -165,7 +216,8 @@ struct Workspace: View {
                     Button("New setup") { scene = ""; selected = nil }
                     Button("Reload") { store.change("New media load") { $0.defaults["load"] = UUID().uuidString; $0.defaults["mag"] = ""; $0.defaults["roll"] = "" } }
                 }
-                Text("Next take inherits visible camera defaults. Reload creates a fresh load ID; enter the new roll and mag in Today before logging.").font(.caption).foregroundStyle(.secondary)
+                Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new roll and mag here before logging.").font(.caption).foregroundStyle(.secondary)
+                recordingSettings
                 Picker("Take",selection:$selected) { Text("Choose take").tag(String?.none); ForEach(store.report.active.reversed()) { e in Text("\(e.values["scene",default:"?"]) / \(e.values["take",default:"?"]) · \(e.values["camera",default:""]) \(e.values["roll",default:""])").tag(Optional(e.id)) } }
                 if let id = selected, let e = store.report.entries.first(where:{$0.id == id && !$0.deleted}) { takeEditor(e) } else { ContentUnavailableView("Ready for the next slate",systemImage:"camera",description:Text("Enter the scene, then add a take. All logging works offline.")) }
             }.padding(20).frame(maxWidth:900,alignment:.leading).frame(maxWidth:.infinity)
@@ -179,7 +231,7 @@ struct Workspace: View {
             }
             Picker("Detail",selection:$detail) { ForEach(["Quick","Standard","Full"],id:\.self) { Text($0) } }.pickerStyle(.segmented)
             ForEach(Schema.take.filter{detail != "Quick" || ["scene","take","remarks"].contains($0.id)}) { f in field(f,entryBinding(e.id,f.id)) }
-            if detail != "Quick" { Divider(); Text("Recorded settings · edit this take only").font(.headline); ForEach(Schema.settings.filter{detail == "Full" || ["lens","stop","iso","temperature","camera","roll"].contains($0.id)}) { f in field(f,entryBinding(e.id,f.id)) } }
+            if detail != "Quick" { Divider(); Text("Recorded settings · changes also carry forward").font(.headline); ForEach(Schema.settings.filter{detail == "Full" || ["lens","stop","iso","temperature","camera","roll"].contains($0.id)}) { f in field(f,entryBinding(e.id,f.id)) } }
             if store.report.active.filter({$0.id != e.id && $0.values["scene"] == e.values["scene"] && $0.values["take"] == e.values["take"] && $0.values["camera"] == e.values["camera"]}).count > 0 { Label("Duplicate scene / take / camera label. Review before export.",systemImage:"exclamationmark.triangle") }
             Toggle("Reviewed by me",isOn:Binding(get:{store.report.entries.first{$0.id == e.id}?.reviewed == true},set:{v in store.change("Changed take review") { r in if let i = r.entries.firstIndex(where:{$0.id == e.id}) { r.entries[i].reviewed = v } }}))
             Button("Remove take (recoverable)",role:.destructive) { store.change("Marked take deleted") { r in if let i = r.entries.firstIndex(where:{$0.id == e.id}) {r.entries[i].deleted = true} }; selected = nil }
@@ -190,7 +242,7 @@ struct Workspace: View {
         List {
             Section("Submission checklist · all views") {
                 Text(store.report.missing.isEmpty ? "Ready for Submission" : "DRAFT · \(store.report.missing.count) requirements outstanding").font(.headline)
-                Text("Missing fields can be completed in Today (defaults / project) or Log → Full (recorded take). Enter N/A with a reason where the report permits it. Changing defaults does not fill existing takes.").font(.caption)
+                Text("Complete project and crew fields in Today and recorded take fields in Log → Full. Enter N/A with a reason where the report permits it. Next-take settings do not fill earlier takes.").font(.caption)
                 ForEach(Array(store.report.missing.enumerated()),id:\.offset) { _,m in Text(m).font(.caption) }
             }
             Section("Find takes") {

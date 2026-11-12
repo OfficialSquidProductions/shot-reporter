@@ -8,7 +8,9 @@ Local shot, camera, and script-supervisor reporting for iPhone, iPad, Mac, Andro
 
 - Record project and crew information, scene/shot/take labels, camera and recording settings, lens/measurement information, flags, and circle takes.
 - Keep camera, DP, continuity, and editorial notes separate.
-- Use Quick, Standard, and Full take views without losing recorded fields.
+- Use Quick, Standard, and Full take views without losing recorded fields. All responsibilities are always available; no job selection is required.
+- Enter camera, media, recording, and lens details in Log. Values carry forward between takes, including changes to recorded settings. Return to defaults resets the next-take fields to the app’s starting values without changing earlier takes.
+- Open appearance and support from Settings at the bottom of the sidebar or tab bar.
 - Check missing fields and self-review the report before handoff.
 - Preview landscape PDFs, export CSV/HTML, and exchange editable `.camreport` files.
 - Start with a blank report or reopen an existing local report.

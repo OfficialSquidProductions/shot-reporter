@@ -36,6 +36,14 @@ class ReportException(message: String) : IllegalArgumentException(message)
         val next=maximum+1
         return copy(entries = entries + Entry(values = defaults + mapOf("scene" to scene, "take" to next.toString()))).record("Added scene $scene, take $next, camera $camera",device)
     }
+    fun setRecordingSetting(key:String,value:String,takeID:String?=null):Report {
+        if (Schema.settings.none {it.id==key}) return this
+        if (takeID!=null && entries.none {it.id==takeID && !it.deleted}) return this
+        return copy(defaults=defaults+(key to value),entries=entries.map {
+            if(it.id==takeID) it.copy(values=it.values+(key to value),reviewed=false) else it
+        })
+    }
+    fun returnToDefaults():Report = copy(defaults=Report().defaults)
     val missing: List<String> get() = buildList {
         val required = listOf("title","date","director","dp","dit") + if (profile == Schema.profiles.first()) listOf("cycle","professor") else emptyList()
         required.filter { values[it].isNullOrBlank() }.forEach { key -> add(Schema.project.first { it.id == key }.title) }
