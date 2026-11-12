@@ -14,7 +14,7 @@ struct ExportFile: FileDocument {
 }
 @main struct CameraStatsApp: App {
     @State private var diagnostics = DiagnosticsCenter.shared
-    @State private var store = Store(root:AppProfile.root,preferences:AppProfile.preferences)
+    @State private var store = Store(root:AppProfile.root,preferences:AppProfile.preferences,preferencesDomain:AppProfile.preferencesDomain)
     #if !os(macOS)
     @UIApplicationDelegateAdaptor(DiagnosticsAppDelegate.self) private var diagnosticsDelegate
     #endif
@@ -65,6 +65,11 @@ struct Workspace: View {
     @AppStorage("theme") var theme = "System"
     @State private var importing = false
     @State private var pending: ImportReview?
+    @State private var completeImport:ProjectArchive.Prepared?
+    @State private var applyImportedPreferences=true
+    @State private var addingFiles=false
+    @State private var fileCategory="attachment"
+    @State private var archiveExport:ArchiveExportItem?
     @State private var exportFile: ExportFile?
     @State private var exporting = false
     @State private var exportType: UTType = .camreport
@@ -129,7 +134,15 @@ struct Workspace: View {
         .fileExporter(isPresented:$exporting,document:exportFile,contentType:exportType,defaultFilename:exportName) { result in switch result { case .failure(let e): store.error = e.localizedDescription; case .success: AppProfile.preferences.set(store.report.revision,forKey:"exported-"+store.slot) } }
         .sheet(isPresented:$showingSupport) {BugReportView(diagnostics:diagnostics)}
         .sheet(item:$pending) { item in importSheet(item) }
-        .onChange(of:pending != nil) {_,value in store.pendingImport=value}
+        .onChange(of:pending != nil || completeImport != nil) {_,value in store.pendingImport=value}
+        .sheet(item:$completeImport,onDismiss:{store.pendingImport=false}) {item in completeImportSheet(item)}
+        #if !os(macOS)
+        .sheet(item:$archiveExport) {item in ArchiveExportPicker(url:item.url) {success in finishArchiveExport(item,success:success);archiveExport=nil}}
+        #endif
+        .fileImporter(isPresented:$addingFiles,allowedContentTypes:[.item],allowsMultipleSelection:true) {result in
+            do {let urls=try result.get();let kind=fileCategory;Task {await store.addProjectFiles(urls,kind:kind)}} catch {store.error=error.localizedDescription}
+        }
+        .overlay {if store.archiveBusy {VStack(spacing:12) {ProgressView();Text(store.archiveStatus ?? "Verifying files…").font(.callout);Text("Keep Shot Reporter open until this finishes.").font(.caption)}.padding(24).background(.regularMaterial,in:RoundedRectangle(cornerRadius:12)).accessibilityElement(children:.combine)}}
         .confirmationDialog("Delete report?",isPresented:Binding(get:{reportToDelete != nil},set:{if !$0 {reportToDelete=nil}}),titleVisibility:.visible,presenting:reportToDelete) { request in
             Button("Delete Report",role:.destructive) {store.deleteReport(request);reportToDelete=nil}
             Button("Cancel",role:.cancel) {reportToDelete=nil}
@@ -142,12 +155,19 @@ struct Workspace: View {
         .alert("Shot Reporter",isPresented:Binding(get:{store.error != nil},set:{if !$0 { store.error = nil }})) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
     func readImport(_ url:URL) {
-        do {
-            let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
-            let attrs = try FileManager.default.attributesOfItem(atPath:url.path)
-            guard ((attrs[.size] as? NSNumber)?.intValue ?? Int.max) <= Exchange.limit else { throw ReportError.invalid("File exceeds 32 MiB maximum") }
-            pending = ImportReview(package:try Exchange.read(Data(contentsOf:url)))
-        } catch { store.error = error.localizedDescription }
+        guard !store.archiveBusy,!store.pendingImport else {store.error="Finish the current import or file operation first.";return}
+        Task {
+            do {
+                let access=url.startAccessingSecurityScopedResource();defer{if access {url.stopAccessingSecurityScopedResource()}}
+                let h=try FileHandle(forReadingFrom:url);let prefix=try h.read(upToCount:6) ?? Data();try h.close()
+                if prefix.count==6,prefix[4]==45,prefix[5]==0 {completeImport=try await store.prepareProjectImport(url);applyImportedPreferences=true}
+                else {
+                    let attrs=try FileManager.default.attributesOfItem(atPath:url.path)
+                    guard ((attrs[.size] as? NSNumber)?.intValue ?? Int.max)<=Exchange.limit else {throw ReportError.invalid("Legacy report exceeds 32 MiB. Complete archives require the new archive format.")}
+                    pending=ImportReview(package:try Exchange.read(Data(contentsOf:url)))
+                }
+            } catch {store.pendingImport=false;store.error=error.localizedDescription}
+        }
     }
     @ViewBuilder func content(_ d: Destination) -> some View {
         VStack(spacing:0) {
@@ -163,7 +183,7 @@ struct Workspace: View {
             case .saves: saves
             case .settings: settings
             }
-        }.navigationTitle(d.rawValue).background(Color("Canvas"))
+        }.disabled(store.archiveBusy).navigationTitle(d.rawValue).background(Color("Canvas"))
         #if !os(macOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -303,10 +323,24 @@ struct Workspace: View {
             }
             Section("Report handoff") {
                 status; Text("Device: \(store.device) · report revision \(store.report.revision) · last file export \(store.lastExportedRevision.map{ "r\($0)" } ?? "none")").font(.caption)
-                Button("Save As .camreport") { export(.camreport,"camreport") {try Exchange.export(store.report,device:store.device)} }
+                Button("Save As .camreport") {Task {if let url=await store.prepareProjectExport() {saveArchive(url)}}}
+                Button("Export report data only (legacy compatibility)…") {export(.camreport,"camreport") {try Exchange.export(store.report,device:store.device)}}
                 Button("Import Save…") { importing = true }
-                Text("A .camreport includes all project/crew fields, Movie/TV metadata (including hidden values), camera defaults, every take and note, flags, review state and edit history. Import on iPhone or Mac with Open as separate editable report for a complete handoff. Attachments, media, device preferences, other saved reports and local recovery snapshots are not included. Merge accepts independent additions only; competing edits must be opened separately. A saved file is not proof of receipt.").font(.caption)
-                Button("Restore previous local snapshot as separate report") { store.restore() }
+                Text("Save As .camreport bundles this complete open report, all files added below, app preferences, the previous local snapshot and known legacy recovery copies. Other saved reports are separate. Media filenames typed in takes do not grant access to files: add those files below before exporting. Both devices need this version or later. Legacy export contains report data only and is limited to 32 MiB. A saved file is not proof of receipt.").font(.caption)
+                Button("Restore previous local snapshot as separate report") { Task {await store.restore()} }
+            }
+            Section("Files in this report") {
+                Text("Files are copied into the report; original files stay where they are. Add every media file or reference document you need to take with you. Folders, aliases and symbolic links are not followed. Large media needs space for a local copy and the archive.").font(.caption)
+                HStack {Button("Add Media…") {fileCategory="media";addingFiles=true};Button("Add Attachments…") {fileCategory="attachment";addingFiles=true}}
+                Button("Add Recovery File…") {fileCategory="recovery";addingFiles=true}
+                ForEach(store.projectState.resources) {resource in
+                    VStack(alignment:.leading) {
+                        Text(resource.name);Text("\(resource.kind.capitalized) · \(ByteCountFormatter.string(fromByteCount:Int64(resource.size),countStyle:.file))").font(.caption).foregroundStyle(.secondary)
+                        if resource.kind=="recovery" {Button("Open recovery as separate report") {Task {await store.restoreProjectRecovery(resource)}}}
+                        Button("Save file copy…") {Task {if let url=await store.prepareResourceExport(resource) {saveArchive(url,complete:false)}}}
+                    }
+                }
+                if store.projectState.resources.isEmpty {Text("No media, attachments or added recovery files yet.").font(.caption)}
             }
             Section("Preview and export") {
                 Button("Preview landscape Camera Report PDF") { do { pdfPreview = PDFReview(data:try Reports.pdf(store.report),revision:store.report.revision,filename:try store.report.exportName(extension:"pdf")) } catch { store.error = error.localizedDescription } }
@@ -324,6 +358,49 @@ struct Workspace: View {
                 #endif
             }
         }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
+    }
+    func saveArchive(_ url:URL,complete:Bool=true) {
+        let item=ArchiveExportItem(url:url,slot:complete ? store.slot:nil,revision:complete ? store.report.revision:nil)
+        #if os(macOS)
+        let panel=NSSavePanel();panel.nameFieldStringValue=url.lastPathComponent;panel.canCreateDirectories=true
+        panel.begin {response in
+            guard response == .OK,let destination=panel.url else {finishArchiveExport(item,success:false);return}
+            let access=destination.startAccessingSecurityScopedResource()
+            Task {
+                do {try await Task.detached {try ArchiveFileCopy.copy(url,to:destination)}.value;finishArchiveExport(item,success:true)}
+                catch {store.error="The file could not be saved. \(error.localizedDescription)";finishArchiveExport(item,success:false)}
+                if access {destination.stopAccessingSecurityScopedResource()}
+            }
+        }
+        #else
+        archiveExport=item
+        #endif
+    }
+    func finishArchiveExport(_ item:ArchiveExportItem,success:Bool) {
+        if success,let slot=item.slot,let revision=item.revision {AppProfile.preferences.set(revision,forKey:"exported-"+slot)}
+        try? FileManager.default.removeItem(at:item.url.deletingLastPathComponent())
+    }
+    func completeImportSheet(_ item:ProjectArchive.Prepared)->some View {
+        NavigationStack {
+            List {
+                Section("Complete open report") {
+                    Text(item.report.values["title",default:"Untitled"])
+                    Text("Revision \(item.report.revision) · \(item.report.entries.count) takes · \(item.manifest.device)")
+                    Text("\(item.snapshot.state.resources.filter{$0.kind=="media"}.count) media · \(item.snapshot.state.resources.filter{$0.kind=="attachment"}.count) attachments · \(item.snapshot.state.resources.filter{$0.kind=="recovery"}.count + (item.snapshot.previous == nil ? 0:1)) recovery copies")
+                    Text(ByteCountFormatter.string(fromByteCount:Int64(item.totalBytes),countStyle:.file))
+                    Text("Every payload passed CRC and SHA-256 checks. This file contains one open report. Reports with the same identity or title stay as separate local copies; no existing report is replaced or merged.").font(.caption)
+                }
+                Section("Preferences") {
+                    Toggle("Apply appearance and detail preferences",isOn:$applyImportedPreferences)
+                    Text("The complete preference snapshot travels with the report for re-export. Appearance and detail are portable; updater, account, security and other device settings are retained as archive data and are never activated by an import.").font(.caption)
+                }
+                Section("Included files") {ForEach(item.snapshot.state.resources) {r in Text("\(r.kind.capitalized): \(r.name)")}}
+                Button("Open as separate editable report") {
+                    do {try store.acceptProject(item,applyPreferences:applyImportedPreferences);selected=nil;completeImport=nil}
+                    catch {store.error=error.localizedDescription}
+                }.buttonStyle(.borderedProminent)
+            }.navigationTitle("Verified import").toolbar {Button("Cancel") {store.discardProject(item);completeImport=nil}}
+        }.interactiveDismissDisabled().frame(minWidth:320,minHeight:450)
     }
     func export(_ type:UTType,_ ext:String,_ data:() throws ->Data) { do { exportType = type; exportName = try store.report.exportName(extension:ext); exportFile = ExportFile(data:try data()); exporting = true } catch {store.error = error.localizedDescription} }
     struct ImportReview: Identifiable { let id = UUID(); let package:Exchange.Package }

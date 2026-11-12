@@ -66,7 +66,7 @@ final class RepositoryTests:XCTestCase {
         store.change("Native saved edit"){$0.values["title"]="Native persisted title"}
         XCTAssertNil(store.error); let accepted=store.report
         let reopened=Store(root:root,preferences:prefs); XCTAssertEqual(reopened.report,accepted); XCTAssertEqual(try Data(contentsOf:legacy),data)
-        reopened.restore(); XCTAssertEqual(reopened.report.values["title"],original.values["title"]); XCTAssertNotEqual(reopened.slot,slot)
+        await reopened.restore(); XCTAssertEqual(reopened.report.values["title"],original.values["title"]); XCTAssertNotEqual(reopened.slot,slot)
     }
     @MainActor func testNativeStoreFailedSaveDoesNotAcceptEdit() async throws {
         let root=try temporary(), prefs=UserDefaults(suiteName:"CameraStatsTests-"+UUID().uuidString)!, a=Store(root:root,preferences:prefs)

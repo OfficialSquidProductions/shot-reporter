@@ -117,7 +117,7 @@ struct DesktopUpdateError:LocalizedError { let message:String; init(_ message:St
     var channelName:String {policy.channel.rawValue.capitalized}
     func configure(store:Store) {
         gate.save={
-            guard !store.blocked,!store.pendingImport,store.error == nil else {throw DesktopUpdateError("Resolve the report's recovery, import or save message before installing an update.")}
+            guard !store.blocked,!store.pendingImport,!store.archiveBusy,store.error == nil else {throw DesktopUpdateError("Resolve the report's recovery, import or save message before installing an update.")}
             if store.saved == nil {try store.persist(store.report)}
             // Every accepted edit already commits with synchronous=FULL. Verify
             // that accepted snapshot instead of saving it twice (which would

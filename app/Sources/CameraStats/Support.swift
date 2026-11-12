@@ -17,7 +17,8 @@ enum AppProfile {
         guard path.hasPrefix("/"),url.lastPathComponent.hasPrefix("ShotReporterTest-") else {fatalError("Invalid isolated Shot Reporter preview profile; normal library will not be opened.")}
         return url
     }()
-    static let preferences:UserDefaults = root.flatMap {UserDefaults(suiteName:"org.squidproductions.shotreporter.test."+Exchange.digest(Data($0.path.utf8)))} ?? .standard
+    static let preferencesDomain:String = root.map {"org.squidproductions.shotreporter.test."+Exchange.digest(Data($0.path.utf8))} ?? (Bundle.main.bundleIdentifier ?? "org.squidproductions.camerastats")
+    static let preferences:UserDefaults = root == nil ? .standard : UserDefaults(suiteName:preferencesDomain)!
 }
 
 @MainActor @Observable final class DiagnosticsCenter {
@@ -139,5 +140,37 @@ final class DiagnosticsAppDelegate:NSObject,UIApplicationDelegate {
 extension Notification.Name {static let reportBugRequested=Notification.Name("ShotReporterReportBugRequested")}
 struct SupportCommands:Commands {
     var body:some Commands {CommandGroup(replacing:.help) {Button("Report a Bug…") {NotificationCenter.default.post(name:.reportBugRequested,object:nil)}}}
+}
+#endif
+
+struct ArchiveExportItem:Identifiable {let id=UUID();var url:URL;var slot:String?;var revision:Int?}
+enum ArchiveFileCopy {
+    static func copy(_ source:URL,to destination:URL)throws {
+        // File coordination preserves existing destination bytes until the complete copy is ready.
+        let coordinator=NSFileCoordinator(),fm=FileManager.default;var coordinationError:NSError?,copyError:Error?
+        coordinator.coordinate(writingItemAt:destination,options:.forReplacing,error:&coordinationError) {target in
+            do {
+                let replacement=try fm.url(for:.itemReplacementDirectory,in:.userDomainMask,appropriateFor:target,create:true)
+                defer{try? fm.removeItem(at:replacement)}
+                let temp=replacement.appendingPathComponent(source.lastPathComponent);try fm.copyItem(at:source,to:temp)
+                if fm.fileExists(atPath:target.path) {_=try fm.replaceItemAt(target,withItemAt:temp)} else {try fm.moveItem(at:temp,to:target)}
+            } catch {copyError=error}
+        }
+        if let coordinationError {throw coordinationError};if let copyError {throw copyError}
+    }
+}
+#if !os(macOS)
+struct ArchiveExportPicker:UIViewControllerRepresentable {
+    var url:URL;var completion:(Bool)->Void
+    func makeCoordinator()->Coordinator {Coordinator(completion)}
+    func makeUIViewController(context:Context)->UIDocumentPickerViewController {
+        let picker=UIDocumentPickerViewController(forExporting:[url],asCopy:true);picker.delegate=context.coordinator;return picker
+    }
+    func updateUIViewController(_ controller:UIDocumentPickerViewController,context:Context) {}
+    final class Coordinator:NSObject,UIDocumentPickerDelegate {
+        let completion:(Bool)->Void;init(_ completion:@escaping(Bool)->Void) {self.completion=completion}
+        func documentPicker(_ controller:UIDocumentPickerViewController,didPickDocumentsAt urls:[URL]) {completion(!urls.isEmpty)}
+        func documentPickerWasCancelled(_ controller:UIDocumentPickerViewController) {completion(false)}
+    }
 }
 #endif

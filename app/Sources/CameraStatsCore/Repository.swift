@@ -20,7 +20,7 @@ public final class Repository {
             sqlite3_busy_timeout(db,3000)
             try execute("PRAGMA journal_mode=WAL"); try execute("PRAGMA synchronous=FULL"); try execute("PRAGMA foreign_keys=ON")
             let version = try scalarInt("PRAGMA user_version")
-            guard version <= 3 else {throw ReportError.invalid("Newer local database schema; existing data preserved")}
+            guard version <= 4 else {throw ReportError.invalid("Newer local database schema; existing data preserved")}
             if version == 0 {
                 try execute("BEGIN IMMEDIATE")
                 do {
@@ -46,6 +46,11 @@ public final class Repository {
                     }
                     try execute("PRAGMA user_version=3"); try execute("COMMIT")
                 } catch {try? execute("ROLLBACK");throw error}
+            }
+            if version < 4 {
+                try execute("BEGIN IMMEDIATE")
+                do {try execute("ALTER TABLE documents ADD COLUMN project_state BLOB");try execute("PRAGMA user_version=4");try execute("COMMIT")}
+                catch {try? execute("ROLLBACK");throw error}
             }
             guard try scalarText("PRAGMA quick_check") == "ok" else {throw ReportError.invalid("Local database integrity check failed; existing data preserved")}
         } catch {sqlite3_close(db); db = nil; throw error}
@@ -85,14 +90,14 @@ public final class Repository {
         try bind(s,2,UUID().uuidString);try bind(s,3,slot);guard sqlite3_step(s) == SQLITE_DONE else {throw message()}
     }
     public func trash() throws ->[TrashItem] {
-        let s=try statement("SELECT slot,title,deleted_at,deletion_token,current,previous FROM documents WHERE deleted=1 ORDER BY slot");defer{sqlite3_finalize(s)}
+        let s=try statement("SELECT slot,title,deleted_at,deletion_token,current,previous,project_state FROM documents WHERE deleted=1 ORDER BY slot");defer{sqlite3_finalize(s)}
         var result:[TrashItem]=[]
         while true {
             let status=sqlite3_step(s);if status == SQLITE_DONE {break}
             guard status == SQLITE_ROW,let slot=sqlite3_column_text(s,0),let title=sqlite3_column_text(s,1),let token=sqlite3_column_text(s,3),sqlite3_column_type(s,2) != SQLITE_NULL else {throw ReportError.invalid("Trash metadata is incomplete; nothing was removed.")}
             let time=sqlite3_column_double(s,2);guard time.isFinite else {throw ReportError.invalid("Invalid trash date; nothing was removed.")}
             var bytes=Data((String(cString:token)+String(time)).utf8)
-            for column:Int32 in [4,5] {if let blob=sqlite3_column_blob(s,column) {bytes.append(Data(bytes:blob,count:Int(sqlite3_column_bytes(s,column))))}}
+            for column:Int32 in [4,5,6] {if let blob=sqlite3_column_blob(s,column) {bytes.append(Data(bytes:blob,count:Int(sqlite3_column_bytes(s,column))))}}
             result.append(TrashItem(id:String(cString:slot),title:String(cString:title),deletedAt:Date(timeIntervalSince1970:time),fingerprint:Exchange.digest(bytes)))
         };return result
     }
@@ -175,4 +180,50 @@ public final class Repository {
             try execute("COMMIT"); return Exchange.digest(payload)
         } catch {try? execute("ROLLBACK"); throw error}
     }
+    public func projectSnapshot(_ slot:String) throws ->ProjectArchive.Snapshot {
+        try validate(slot);try execute("BEGIN IMMEDIATE")
+        do {
+            guard let current=try bytes(slot) else {throw ReportError.invalid("Open a saved report before archiving.")}
+            let previous=try bytes(slot,previous:true),state=try projectState(slot)
+            try execute("COMMIT");return ProjectArchive.Snapshot(current:current,previous:previous,state:state)
+        } catch {try? execute("ROLLBACK");throw error}
+    }
+    public func projectState(_ slot:String)throws->ProjectArchive.State {
+        try validate(slot);let s=try statement("SELECT project_state FROM documents WHERE slot=? AND deleted=0");defer{sqlite3_finalize(s)};try bind(s,1,slot)
+        let status=sqlite3_step(s);guard status == SQLITE_ROW else {if status == SQLITE_DONE {throw ReportError.invalid("Project is no longer available.")};throw message()}
+        guard sqlite3_column_type(s,0) != SQLITE_NULL else {return ProjectArchive.State()}
+        let count=Int(sqlite3_column_bytes(s,0));guard count<=ProjectArchive.metadataLimit,let bytes=sqlite3_column_blob(s,0) else {throw ReportError.invalid("Project catalog is damaged; its bytes are preserved.")}
+        let state=try JSONDecoder().decode(ProjectArchive.State.self,from:Data(bytes:bytes,count:count));try ProjectArchive.validate(state);return state
+    }
+    public func setProjectState(_ state:ProjectArchive.State,slot:String,expectedFingerprint:String,expectedState:ProjectArchive.State)throws {
+        try ProjectArchive.validate(state);try validate(slot);try execute("BEGIN IMMEDIATE")
+        do {
+            guard try load(slot).fingerprint==expectedFingerprint,try projectState(slot)==expectedState else {throw ReportError.invalid("Report changed. Reopen it before adding files.")}
+            let s=try statement("UPDATE documents SET project_state=? WHERE slot=? AND deleted=0");defer{sqlite3_finalize(s)};try bind(s,1,Exchange.encoder().encode(state));try bind(s,2,slot);guard sqlite3_step(s)==SQLITE_DONE else {throw message()}
+            try execute("COMMIT")
+        } catch {try? execute("ROLLBACK");throw error}
+    }
+    /// Import is always into a fresh local identity. Original report identity and snapshot bytes survive.
+    public func importProject(_ snapshot:ProjectArchive.Snapshot,slot:String) throws ->Loaded {
+        try importProject(snapshot,slot:slot,failBeforeCommit:false)
+    }
+    func importProject(_ snapshot:ProjectArchive.Snapshot,slot:String,failBeforeCommit:Bool)throws->Loaded {
+        try validate(slot);try ProjectArchive.validate(snapshot.state)
+        guard snapshot.current.count<=Exchange.limit,(snapshot.previous?.count ?? 0)<=Exchange.limit else {throw ReportError.invalid("Oversized report snapshot.")}
+        let report=try Exchange.read(snapshot.current).report;if let previous=snapshot.previous {_=try Exchange.read(previous)}
+        try execute("BEGIN IMMEDIATE")
+        do {
+            guard try !knownSlots().contains(slot) else {throw ReportError.invalid("Import cannot replace an existing or permanently removed report.")}
+            let s=try statement("INSERT INTO documents(slot,title,revision,current,previous,project_state) VALUES(?,?,?,?,?,?)");defer{sqlite3_finalize(s)}
+            try bind(s,1,slot);try bind(s,2,report.values["title",default:"Untitled"]);guard sqlite3_bind_int64(s,3,sqlite3_int64(report.revision))==SQLITE_OK else {throw message()};try bind(s,4,snapshot.current)
+            if let previous=snapshot.previous {try bind(s,5,previous)} else {guard sqlite3_bind_null(s,5)==SQLITE_OK else {throw message()}}
+            try bind(s,6,Exchange.encoder().encode(snapshot.state));guard sqlite3_step(s)==SQLITE_DONE else {throw message()}
+            let loaded=try select(slot);if failBeforeCommit {throw ReportError.invalid("Injected interrupted project import")};try execute("COMMIT");return loaded
+        } catch {try? execute("ROLLBACK");throw error}
+    }
+    public func purgedSlots()throws->Set<String> {
+        let s=try statement("SELECT slot FROM purged_slots");defer{sqlite3_finalize(s)};var result=Set<String>()
+        while true {let status=sqlite3_step(s);if status==SQLITE_DONE {break};guard status==SQLITE_ROW,let value=sqlite3_column_text(s,0) else {throw message()};result.insert(String(cString:value))};return result
+    }
+
 }
