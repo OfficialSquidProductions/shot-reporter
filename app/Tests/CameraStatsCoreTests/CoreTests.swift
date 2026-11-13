@@ -87,7 +87,7 @@ final class CoreTests: XCTestCase {
     func testAllFieldsAndHiddenRequirements() {
         var r = Report.fixture(); let original = r.entries
         r.positions = ["2nd AC"]; XCTAssertEqual(r.entries,original)
-        r.entries[0].values["height"] = ""; XCTAssertTrue(r.missing.contains("Row 1: Camera height (include units)"))
+        r.entries[0].values["height"] = ""; XCTAssertTrue(r.missing.contains("Row 1: Camera height"))
         XCTAssertTrue(Schema.settings.map(\.id).contains("distance")); XCTAssertTrue(Schema.settings.map(\.id).contains("filters"))
     }
     func testCSVAndHTMLInjectionEscaped() {

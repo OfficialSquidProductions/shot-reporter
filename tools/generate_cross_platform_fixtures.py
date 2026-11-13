@@ -19,7 +19,7 @@ output = args.output.absolute() if args.output else root/'fixtures/camreport'
 if args.output and (output.exists() or output.is_symlink()):
     parser.error('Choose a fresh output directory; existing files are preserved.')
 sources = [root/'app/Sources/CameraStatsCore'/name for name in
-           ['Model.swift', 'NamingSettings.swift', 'Exchange.swift', 'Reports.swift']]
+           ['Model.swift','Production.swift', 'NamingSettings.swift', 'Exchange.swift', 'Reports.swift']]
 sources.append(root/'app/Tests/CameraStatsCoreTests/LegacyReportFixtures.swift')
 with tempfile.TemporaryDirectory(prefix='camerastats-fixture-tool-') as directory:
     temporary = Path(directory)

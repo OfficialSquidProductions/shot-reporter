@@ -4,22 +4,22 @@ import CoreText
 
 public enum Reports {
     public static func csv(_ report: Report) -> String {
-        let keys = Schema.take.map(\.id) + Schema.settings.map(\.id) + ["flags","reviewed","entryID"]
+        let keys = Schema.take.map(\.id) + (Schema.settings+Schema.legacySettings).map(\.id) + ["flags","reviewed","entryID"]
         func quote(_ s: String) -> String { "\"" + s.replacingOccurrences(of:"\"",with:"\"\"") + "\"" }
         var rows = [keys.map(quote).joined(separator:",")]
-        rows += report.active.map { entry in keys.map { key in quote(key == "flags" ? entry.flags.sorted().joined(separator:"; ") : key == "reviewed" ? String(entry.reviewed) : key == "entryID" ? entry.id : entry.values[key,default:""]) }.joined(separator:",") }
+        rows += report.active.map { entry in keys.map { key in quote(key == "flags" ? entry.flags.sorted().joined(separator:"; ") : key == "reviewed" ? String(entry.reviewed) : key == "entryID" ? entry.id : report.displayedValue(key,in:entry)) }.joined(separator:",") }
         return rows.joined(separator:"\r\n") + "\r\n"
     }
     public static func html(_ report: Report) -> String {
         func esc(_ s: String) -> String { s.replacingOccurrences(of:"&",with:"&amp;").replacingOccurrences(of:"<",with:"&lt;").replacingOccurrences(of:">",with:"&gt;").replacingOccurrences(of:"\"",with:"&quot;") }
         let fields = Schema.take + Schema.settings
-        let rows = report.active.map { e in "<tr>" + fields.map{"<td>\(esc(e.values[$0.id,default:""]))</td>"}.joined() + "<td>\(esc(e.flags.sorted().joined(separator:", ")))</td></tr>" }.joined()
-        return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shot Reporter report</title><style>body{font:14px system-ui;margin:32px;color:#241d21}table{border-collapse:collapse}td,th{border:1px solid #777;padding:8px;white-space:pre-wrap}thead{display:table-header-group}</style><h1>\(esc(report.values["title",default:"Untitled"]))</h1><p>A Squid Productions Software · Revision \(report.revision) · \(report.missing.isEmpty ? "Ready for Submission" : "DRAFT — \(report.missing.count) missing requirements")</p><p>\(esc(report.visibleProjectValues.sorted{$0.key < $1.key}.map{"\($0.key): \($0.value)"}.joined(separator:" · ")))</p><table><thead><tr>" + fields.map{"<th>\(esc($0.title))</th>"}.joined() + "<th>Flags</th></tr></thead><tbody>\(rows)</tbody></table></html>"
+        let rows = report.active.map { e in "<tr>" + fields.map{"<td>\(esc(report.displayedValue($0.id,in:e)))</td>"}.joined() + "<td>\(esc(e.flags.sorted().joined(separator:", ")))</td></tr>" }.joined()
+        return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shot Reporter report</title><style>body{font:14px system-ui;margin:32px;color:#241d21}table{border-collapse:collapse}td,th{border:1px solid #777;padding:8px;white-space:pre-wrap}thead{display:table-header-group}</style><h1>\(esc(report.displayTitle))</h1><p>A Squid Productions Software · Revision \(report.revision) · \(report.missing.isEmpty ? "Ready for Submission" : "DRAFT — \(report.missing.count) missing requirements")</p><p>\(esc(report.visibleProjectValues.sorted{$0.key < $1.key}.map{"\($0.key): \($0.value)"}.joined(separator:" · ")))</p><table><thead><tr>" + fields.map{"<th>\(esc($0.title))</th>"}.joined() + "<th>Flags</th></tr></thead><tbody>\(rows)</tbody></table></html>"
     }
     public static func pdf(_ report: Report) throws -> Data {
         let output=NSMutableData(),pageWidth:CGFloat=842,pageHeight:CGFloat=595
         var box=CGRect(x:0,y:0,width:pageWidth,height:pageHeight)
-        guard let consumer=CGDataConsumer(data:output),let cg=CGContext(consumer:consumer,mediaBox:&box,[kCGPDFContextCreator as String:"Shot Reporter - Squid Productions",kCGPDFContextTitle as String:report.values["title",default:"Shot Reporter report"]] as CFDictionary) else {throw ReportError.invalid("Could not create PDF")}
+        guard let consumer=CGDataConsumer(data:output),let cg=CGContext(consumer:consumer,mediaBox:&box,[kCGPDFContextCreator as String:"Shot Reporter - Squid Productions",kCGPDFContextTitle as String:report.displayTitle] as CFDictionary) else {throw ReportError.invalid("Could not create PDF")}
         struct Line {let text:String;let bold:Bool}
         func draw(_ text:String,_ x:CGFloat,_ y:CGFloat,_ size:CGFloat=10,_ bold:Bool=false) {
             let font=CTFontCreateWithName((bold ? "Helvetica-Bold" : "Helvetica") as CFString,size,nil)
@@ -43,8 +43,12 @@ public enum Reports {
         var page=0
         func begin(_ section:String) {
             page += 1;cg.beginPDFPage(nil)
-            draw("Shot Reporter - Camera Report",28,30,17,true)
-            draw("A Squid Productions Software",28,47,9)
+            let titleFont=CTFontCreateWithName("Helvetica-Bold" as CFString,16,nil)
+            let titleAttributes=[NSAttributedString.Key(kCTFontAttributeName as String):titleFont]
+            let title=CTLineCreateWithAttributedString(NSAttributedString(string:report.displayTitle,attributes:titleAttributes))
+            let ellipsis=CTLineCreateWithAttributedString(NSAttributedString(string:"...",attributes:titleAttributes))
+            cg.textPosition=CGPoint(x:28,y:pageHeight-30);CTLineDraw(CTLineCreateTruncatedLine(title,786,.end,ellipsis) ?? title,cg)
+            draw("Shot Reporter - Camera Report | A Squid Productions Software",28,49,9)
             draw(section,28,72,11,true)
             cg.setStrokeColor(CGColor(gray:0.72,alpha:1));cg.move(to:CGPoint(x:28,y:pageHeight-82));cg.addLine(to:CGPoint(x:814,y:pageHeight-82));cg.strokePath()
             draw("Revision \(report.revision)  |  Report \(report.id.prefix(8))",28,577,8)
@@ -69,8 +73,11 @@ public enum Reports {
             let v=e.values
             let camera=[Field("scene","Scene / setup",""),Field("take","Take label","")]+Schema.settings.filter{["camera","mag","load","lens","stop","height","distance"].contains($0.id)}
             let recording=Schema.settings.filter{!["camera","mag","load","lens","stop","height","distance","roll"].contains($0.id)}
-            let notes=Schema.take.filter{!["scene","take"].contains($0.id)}
-            let columns=[camera.flatMap{field($0.title,v[$0.id],width:widths[0])},recording.flatMap{field($0.title,v[$0.id],width:widths[1])},field("Flags",e.flags.isEmpty ? "None":e.flags.sorted().joined(separator:", "),width:widths[2])+field("Review",e.reviewed ? "Reviewed":"Review pending",width:widths[2])+notes.flatMap{field($0.title,v[$0.id],width:widths[2])}]
+            let notes=Schema.take.filter{!["scene","take"].contains($0.id) && !Schema.lighting.map(\.id).contains($0.id)}
+            let meterRaw=v["lightMeter",default:""],meterUnit=v["lightMeterUnit",default:"f-stop"]
+            let meterValue=meterUnit=="f-stop" ? (meterRaw.lowercased().hasPrefix("f/") ? meterRaw:"f/"+meterRaw):meterRaw+" "+meterUnit
+            let lighting=meterRaw.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? []:wrap("LIGHT AT SUBJECT",width:widths[1],bold:true)+field("Meter reading",meterValue,width:widths[1])+field("Subject / meter context",v["lightMeterContext"],width:widths[1])
+            let columns=[camera.flatMap{field($0.title,report.displayedValue($0.id,in:e),width:widths[0])},recording.flatMap{field($0.title,report.displayedValue($0.id,in:e),width:widths[1])}+lighting,field("Flags",e.flags.isEmpty ? "None":e.flags.sorted().joined(separator:", "),width:widths[2])+field("Review",e.reviewed ? "Reviewed":"Review pending",width:widths[2])+notes.flatMap{field($0.title,v[$0.id],width:widths[2])}]
             // Keep columns independent and preserve long multiline notes on labeled continuation pages.
             var row=0
             repeat {

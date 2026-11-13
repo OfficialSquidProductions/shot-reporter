@@ -76,8 +76,10 @@ public final class Repository {
         let status=sqlite3_step(s); if status == SQLITE_DONE {return nil}; guard status == SQLITE_ROW, let text=sqlite3_column_text(s,0) else {throw message()}; return String(cString:text)
     }
     public func list(deleted:Bool=false) throws ->[Document] {
-        let s=try statement("SELECT slot,title,revision FROM documents WHERE deleted=\(deleted ? 1 : 0) ORDER BY title,slot"); defer{sqlite3_finalize(s)}; var result:[Document]=[]
-        while true {let status=sqlite3_step(s); if status == SQLITE_DONE {break}; guard status == SQLITE_ROW, let slot=sqlite3_column_text(s,0), let title=sqlite3_column_text(s,1) else {throw message()}; result.append(Document(slot:String(cString:slot),title:String(cString:title),revision:Int(sqlite3_column_int64(s,2))))}; return result
+        let s=try statement("SELECT slot,title,revision,current FROM documents WHERE deleted=\(deleted ? 1 : 0) ORDER BY title,slot"); defer{sqlite3_finalize(s)}; var result:[Document]=[]
+        while true {let status=sqlite3_step(s); if status == SQLITE_DONE {break}; guard status == SQLITE_ROW, let slot=sqlite3_column_text(s,0), let title=sqlite3_column_text(s,1) else {throw message()}; var label=Report.displayTitle(String(cString:title));let size=Int(sqlite3_column_bytes(s,3))
+            if size<=Exchange.limit,let blob=sqlite3_column_blob(s,3),let parsed=try? Exchange.read(Data(bytes:blob,count:size)) {label=parsed.report.displayTitle}
+            result.append(Document(slot:String(cString:slot),title:label,revision:Int(sqlite3_column_int64(s,2))))}; return result
     }
     public func knownSlots() throws ->Set<String> {
         let s=try statement("SELECT slot FROM documents UNION SELECT slot FROM purged_slots");defer{sqlite3_finalize(s)}
@@ -203,16 +205,23 @@ public final class Repository {
             try execute("COMMIT")
         } catch {try? execute("ROLLBACK");throw error}
     }
-    /// Import is always into a fresh local identity. Original report identity and snapshot bytes survive.
-    public func importProject(_ snapshot:ProjectArchive.Snapshot,slot:String) throws ->Loaded {
-        try importProject(snapshot,slot:slot,failBeforeCommit:false)
+    public struct ProjectSourceVersion {
+        public var slot:String;public var fingerprint:String;public var state:ProjectArchive.State
+        public init(slot:String,fingerprint:String,state:ProjectArchive.State) {self.slot=slot;self.fingerprint=fingerprint;self.state=state}
     }
-    func importProject(_ snapshot:ProjectArchive.Snapshot,slot:String,failBeforeCommit:Bool)throws->Loaded {
+    /// Import is always into a fresh local identity. Original report identity and snapshot bytes survive.
+    public func importProject(_ snapshot:ProjectArchive.Snapshot,slot:String,expectedSource:ProjectSourceVersion?=nil) throws ->Loaded {
+        try importProject(snapshot,slot:slot,expectedSource:expectedSource,failBeforeCommit:false)
+    }
+    func importProject(_ snapshot:ProjectArchive.Snapshot,slot:String,expectedSource:ProjectSourceVersion?=nil,failBeforeCommit:Bool)throws->Loaded {
         try validate(slot);try ProjectArchive.validate(snapshot.state)
         guard snapshot.current.count<=Exchange.limit,(snapshot.previous?.count ?? 0)<=Exchange.limit else {throw ReportError.invalid("Oversized report snapshot.")}
         let report=try Exchange.read(snapshot.current).report;if let previous=snapshot.previous {_=try Exchange.read(previous)}
         try execute("BEGIN IMMEDIATE")
         do {
+            if let source=expectedSource {
+                guard try load(source.slot).fingerprint==source.fingerprint,try projectState(source.slot)==source.state else {throw ReportError.invalid("The source report changed while preparing the new day. Nothing was replaced; review Start New Day again.")}
+            }
             guard try !knownSlots().contains(slot) else {throw ReportError.invalid("Import cannot replace an existing or permanently removed report.")}
             let s=try statement("INSERT INTO documents(slot,title,revision,current,previous,project_state) VALUES(?,?,?,?,?,?)");defer{sqlite3_finalize(s)}
             try bind(s,1,slot);try bind(s,2,report.values["title",default:"Untitled"]);guard sqlite3_bind_int64(s,3,sqlite3_int64(report.revision))==SQLITE_OK else {throw message()};try bind(s,4,snapshot.current)

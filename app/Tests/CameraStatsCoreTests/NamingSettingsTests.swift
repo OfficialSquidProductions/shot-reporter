@@ -30,14 +30,14 @@ final class NamingSettingsTests: XCTestCase {
         XCTAssertNoThrow(try Naming.preview(template: report.naming.reportTemplate, report: report, entry: report.entries[0]))
         report.updateNaming {$0.preset = .television}
         XCTAssertTrue(report.reportNameNeedsValues)
-        XCTAssertEqual(try report.exportName(extension: "csv"), "Shot-Reporter-r\(report.revision).csv")
+        XCTAssertEqual(try report.exportName(extension: "csv"), "Shot-Reporter-Day05-r\(report.revision).csv")
         XCTAssertThrowsError(try Naming.preview(template: report.naming.reportTemplate, report: report, entry: report.entries[0]))
         report.updateNaming {$0.setEnabled("season", false); $0.setEnabled("episode", false)}
         XCTAssertNoThrow(try report.exportName(extension: "csv"))
         XCTAssertFalse(report.reportNameNeedsValues)
         XCTAssertFalse(report.naming.copyTemplate.contains("_SE_"))
         report.updateNaming {$0.setEnabled("project", false)}
-        XCTAssertEqual(try report.exportName(extension: "csv"), "Shot-Reporter-r\(report.revision).csv")
+        XCTAssertEqual(try report.exportName(extension: "csv"), "Shot-Reporter-Day05-r\(report.revision).csv")
         XCTAssertThrowsError(try Naming.preview(template: "{take:99}", report: report, entry: report.entries[0]))
         XCTAssertThrowsError(try Naming.preview(template: "{take:}", report: report, entry: report.entries[0]))
     }

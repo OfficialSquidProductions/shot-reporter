@@ -110,6 +110,12 @@ public extension Report {
     var reportNameNeedsValues: Bool {reportNameStem == nil}
     func exportName(extension ext: String) throws -> String {
         // A naming error must never prevent a draft or recovery backup.
-        "\(reportNameStem ?? "Shot-Reporter")-r\(revision).\(ext)"
+        let day=Self.dayLabel(values["day"])
+        var suffix=""
+        if !day.isEmpty,!naming.reportTemplate.contains("{day") {
+            var safe=self;safe.values["day"]=day
+            if let checked=try? Naming.preview(template:"{day}",report:safe,entry:Entry(values:[:])) {suffix="-Day"+checked}
+        }
+        return "\(reportNameStem ?? "Shot-Reporter")\(suffix)-r\(revision).\(ext)"
     }
 }

@@ -17,6 +17,8 @@ extension Report {
             v["continuity"]="Actor carries umbrella in left hand. Cup at 2/3 full. Dialogue cue: ‘Ready?’\nMatch rain level and coat collar to master."
             v["editorNotes"]="Use entrance after cue; preserve 2-second head and tail. \(i==2 ? "Preferred performance.":"Alternate timing.")"
             v["sound"]="SOUND_012_\(i+1).wav";v["timecode"]="22:14:\(String(format:"%02d",i)):00";v["customTakeField"]="Lens serial synthetic \(i+1)"
+            if i==0 {v["lightMeter"]="2.8 + 1/3";v["lightMeterUnit"]="f-stop";v["lightMeterContext"]="Subject face / incident / ISO 800 / 1/48 s"}
+            if i==1 {v["lightMeter"]="400";v["lightMeterUnit"]="lux";v["lightMeterContext"]="Doorway key / incident"}
             var e=Entry(values:v);e.id=String(format:"63000000-0000-4000-8000-%012d",i+1);e.created=Date(timeIntervalSinceReferenceDate:815_000_000+Double(i));e.flags=i==2 ? ["Circle","MOS","Tail slate"]:[];e.reviewed=i != 5;e.deleted=i==5;r.entries.append(e)
         }
         r.namingTemplate="{project}_S{season}E{episode}_SC{scene}_TK{take:03}_CAM-{camera}"

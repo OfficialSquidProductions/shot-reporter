@@ -8,8 +8,10 @@ public struct Field: Identifiable {
 }
 public enum Schema {
     public static let project: [Field] = [Field("title", "Production title", "Project / crew"), Field("date", "Shooting date", "Project / crew"), Field("day", "Shooting day", "Project / crew"), Field("director", "Director", "Project / crew"), Field("dp", "Director of photography", "Project / crew"), Field("dit", "DIT / data — use N/A if unassigned", "Project / crew"), Field("cycle", "Cycle Group #", "Student"), Field("professor", "Cohort Professor", "Student"), Field("season", "Season", "Project / crew"), Field("episode", "Episode", "Project / crew")]
-    public static let settings: [Field] = [Field("camera", "Camera", "Camera / media"), Field("mag", "SSD / physical mag", "Camera / media"), Field("load", "Load ID", "Camera / media"), Field("resolution", "Resolution", "Recording settings"), Field("compression", "Compression", "Recording settings"), Field("aspect", "Aspect ratio", "Recording settings"), Field("playbackRate", "Project time base (e.g. 24000/1001)", "Recording settings"), Field("sensorRate", "Varispeed / sensor FPS", "Recording settings"), Field("shutter", "Shutter angle / speed", "Recording settings"), Field("iso", "ISO", "Recording settings"), Field("temperature", "Color temperature / tint", "Recording settings"), Field("filters", "Filters / internal & external ND", "Recording settings"), Field("look", "Log / gamut / look reference", "Recording settings"), Field("lens", "Lens / focal length", "Lens / measurements"), Field("stop", "T-stop", "Lens / measurements"), Field("height", "Camera height (include units)", "Lens / measurements"), Field("distance", "Focus / subject distance (include units)", "Lens / measurements")]
-    public static let take: [Field] = [Field("scene", "Scene / setup", "Slate"), Field("take", "Take label", "Slate"), Field("remarks", "Camera remarks", "Notes"), Field("dpNotes", "DP intent / selects", "Notes"), Field("continuity", "Script / continuity notes", "Notes"), Field("editorNotes", "Editorial notes", "Notes"), Field("sound", "Sound roll / file", "Post references"), Field("originalFilename", "Original clip filename", "Post references"), Field("timecode", "Source timecode (manual)", "Post references")]
+    public static let settings: [Field] = [Field("camera", "Camera", "Camera / media"), Field("mag", "SSD / physical mag", "Camera / media"), Field("load", "Load ID", "Camera / media"), Field("resolution", "Resolution", "Recording settings"), Field("compression", "Compression", "Recording settings"), Field("aspect", "Aspect ratio", "Recording settings"), Field("shutter", "Shutter angle / speed", "Recording settings"), Field("iso", "ISO", "Recording settings"), Field("temperature", "Color temperature / tint", "Recording settings"), Field("filters", "Filters / internal & external ND", "Recording settings"), Field("look", "Log / gamut / look reference", "Recording settings"), Field("lens", "Lens / focal length", "Lens / measurements"), Field("stop", "T-stop", "Lens / measurements"), Field("height", "Camera height", "Lens / measurements"), Field("distance", "Focus / subject distance", "Lens / measurements")]
+    public static let legacySettings:[Field] = [Field("playbackRate","Project time base (legacy)","Legacy"),Field("sensorRate","Sensor FPS (legacy)","Legacy")]
+    public static let lighting:[Field] = [Field("lightMeter","Light meter reading","Lighting"),Field("lightMeterUnit","Light meter unit","Lighting"),Field("lightMeterContext","Meter context / subject","Lighting")]
+    public static let take: [Field] = [Field("scene", "Scene / setup", "Slate"), Field("take", "Take label", "Slate"), Field("lightMeter", "Light meter reading", "Lighting"), Field("lightMeterUnit", "Light meter unit", "Lighting"), Field("lightMeterContext", "Meter context / subject", "Lighting"), Field("remarks", "Camera remarks", "Notes"), Field("dpNotes", "DP intent / selects", "Notes"), Field("continuity", "Script / continuity notes", "Notes"), Field("editorNotes", "Editorial notes", "Notes"), Field("sound", "Sound roll / file", "Post references"), Field("originalFilename", "Original clip filename", "Post references"), Field("timecode", "Source timecode (manual)", "Post references")]
     public static let profiles = ["Student / Cinematic Arts Full Report", "Small Crew / Combined Duties", "Feature / Television Department", "Custom Production"]
     public static let positions = ["All Duties", "2nd AC", "1st AC", "DP / operator", "DIT / data", "Script / continuity"]
 }
@@ -50,12 +52,13 @@ public struct Report: Codable, Equatable {
     public var importedPackages: [String] = []
     public var namingSettings: NamingSettings?
     public var namingTemplate = "{project}_SC{scene}_TK{take}_CAM-{camera}"
-    public init() { values["date"] = ISO8601DateFormatter().string(from: Date()).prefix(10).description }
+    public init() { values["day"]="1";values["date"] = ISO8601DateFormatter().string(from: Date()).prefix(10).description }
     /// Presentation only: the production title remains the single stored source of truth.
-    public var displayTitle:String {Self.displayTitle(values["title"])}
-    public static func displayTitle(_ title:String?)->String {
+    public var displayTitle:String {Self.displayTitle(values["title"],day:values["day"])}
+    public static func displayTitle(_ title:String?,day:String?=nil)->String {
         let title=(title ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
-        return title.isEmpty ? "Untitled production":title
+        let base=title.isEmpty ? "Untitled production":title
+        let day=Self.dayLabel(day);return day.isEmpty ? base:base+" Day "+day
     }
     public var productionMode: ProductionMode {
         get { ProductionMode(rawValue:values["productionMode",default:""]) ?? .movie }
@@ -68,12 +71,12 @@ public struct Report: Codable, Equatable {
     public mutating func next(scene: String, device: String) -> String {
         let camera = defaults["camera",default:""]
         let n = active.filter { $0.values["scene"] == scene && $0.values["camera"] == camera }.compactMap { Int($0.values["take",default:""]) }.max() ?? 0
-        var snapshot = defaults; snapshot["scene"] = scene; snapshot["take"] = String(n+1)
+        var snapshot = defaults;for field in Schema.lighting {snapshot.removeValue(forKey:field.id)}; snapshot["scene"] = scene; snapshot["take"] = String(n+1)
         let entry = Entry(values:snapshot); entries.append(entry); record("Added scene \(scene), take \(n+1), camera \(camera)", device:device); return entry.id
     }
     // Current logging settings are persisted in the existing defaults map for schema-1 compatibility.
     public mutating func setRecordingSetting(_ key: String, value: String, takeID: String? = nil) {
-        guard Schema.settings.contains(where: { $0.id == key }) else { return }
+        guard (Schema.settings+Schema.legacySettings).contains(where: { $0.id == key }) else { return }
         if let takeID {
             guard let index = entries.firstIndex(where: { $0.id == takeID && !$0.deleted }) else { return }
             entries[index].values[key] = value

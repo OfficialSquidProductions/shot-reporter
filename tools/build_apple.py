@@ -5,7 +5,7 @@ import json, shutil, plistlib, argparse, re
 parser=argparse.ArgumentParser()
 parser.add_argument('--distribution',choices=['development','direct','testflight','appstore'],default='development')
 parser.add_argument('--version',default='0.2.0',help='Three-part numeric Apple marketing version')
-parser.add_argument('--build',type=int,default=15,help='Monotonic positive Apple build number')
+parser.add_argument('--build',type=int,default=16,help='Monotonic positive Apple build number')
 args=parser.parse_args()
 if not re.fullmatch(r'\d+\.\d+\.\d+',args.version) or args.build < 1:
     parser.error('--version must have three numeric components and --build must be positive')
@@ -21,7 +21,7 @@ logo.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(ROOT / 'assets/brand/SP_GREEN.png', logo / 'SP_GREEN.png')
 (assets / 'Contents.json').write_text(json.dumps({'info':{'author':'xcode','version':1}}))
 (logo / 'Contents.json').write_text(json.dumps({'images':[{'filename':'SP_GREEN.png','idiom':'universal'}],'info':{'author':'xcode','version':1}}))
-for name,light,dark in [('Canvas','FAF8F9','191419'),('Paper','FFFFFF','251D23'),('Ink','241D21','F3EAF0'),('AccentColor','237B20','95DF8D')]:
+for name,light,dark in [('Canvas','FAF8F9','191419'),('Paper','FFFFFF','251D23'),('Ink','241D21','F3EAF0'),('AccentColor','237B20','95DF8D'),('SelectionGreen','145533','145533')]:
     folder=assets/(name+'.colorset'); folder.mkdir(exist_ok=True)
     def color(hexvalue):
         components = {c:f'{int(hexvalue[i:i+2],16)/255:.6f}' for c,i in [('red',0),('green',2),('blue',4)]}

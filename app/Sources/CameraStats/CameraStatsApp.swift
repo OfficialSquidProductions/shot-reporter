@@ -84,6 +84,7 @@ struct Workspace: View {
     @State private var showingSupport=false
     @State private var reportToDelete: Store.DeletionRequest?
     @State private var trashToClear:Store.TrashRequest?
+    @State private var nextDay:Store.NewDayRequest?
     @Environment(\.scenePhase) private var scenePhase
     private var diagnostics:DiagnosticsCenter {DiagnosticsCenter.shared}
     var scheme:ColorScheme? { theme == "Dark" ? .dark : theme == "Light" ? .light : nil }
@@ -101,8 +102,8 @@ struct Workspace: View {
                                 Button { destination = d } label: {
                                     Label(d.rawValue,systemImage:d.icon).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,12).padding(.vertical,10).contentShape(Rectangle())
                                 }.buttonStyle(.plain)
-                                    .foregroundStyle(destination == d ? Color("AccentColor") : Color.primary)
-                                    .background(destination == d ? Color("AccentColor").opacity(0.12) : Color.clear,in:RoundedRectangle(cornerRadius:6))
+                                    .foregroundStyle(destination == d ? Color.white : Color.primary)
+                                    .background(destination == d ? Color("SelectionGreen") : Color.clear,in:RoundedRectangle(cornerRadius:6))
                                     .accessibilityAddTraits(destination == d ? .isSelected : [])
                             }
                         }.padding(10)
@@ -110,7 +111,7 @@ struct Workspace: View {
                     Divider()
                     Button { destination = .settings } label: {
                         Label("Settings",systemImage:"gearshape").frame(maxWidth:.infinity,alignment:.leading).padding(16).contentShape(Rectangle())
-                    }.buttonStyle(.plain).foregroundStyle(destination == .settings ? Color("AccentColor") : Color.secondary)
+                    }.buttonStyle(.plain).foregroundStyle(destination == .settings ? Color.white : Color.primary).background(destination == .settings ? Color("SelectionGreen"):Color.clear,in:RoundedRectangle(cornerRadius:6))
                 }.background(Color("Paper"))
                 .navigationSplitViewColumnWidth(min:230,ideal:260,max:320)
             } detail: { content(destination ?? .today) }
@@ -151,6 +152,10 @@ struct Workspace: View {
             Button("Permanently Remove \(request.items.count) Deleted Report(s)",role:.destructive) {store.clearTrash(request);trashToClear=nil}
             Button("Cancel",role:.cancel) {trashToClear=nil}
         } message: {request in Text("Remove \(request.items.count) deleted report(s) and their previous local snapshots from this device? This cannot be undone in the app. Saved reports are kept. Previously exported files, legacy recovery files and external backups are not erased.")}
+        .confirmationDialog("Start New Day?",isPresented:Binding(get:{nextDay != nil},set:{if !$0 {nextDay=nil}}),titleVisibility:.visible,presenting:nextDay) {request in
+            Button("Create \(request.next.displayTitle)") {Task {await store.startNewDay(request)};nextDay=nil}
+            Button("Cancel",role:.cancel) {nextDay=nil}
+        } message:{request in Text("Create \(request.next.displayTitle) for \(request.next.values["date",default:""])? Production, crew, general camera settings and reference attachments are copied. Takes, prior-day media and recoveries stay with \(request.sourceName), which is kept unchanged.")}
         .sheet(item:$pdfPreview) { item in PDFReviewScreen(item:item) }
         .alert("Shot Reporter",isPresented:Binding(get:{store.error != nil},set:{if !$0 { store.error = nil }})) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
@@ -192,28 +197,36 @@ struct Workspace: View {
     func projectBinding(_ key:String) -> Binding<String> { Binding(get:{store.report.values[key,default:""]},set:{v in store.change { $0.values[key] = v }}) }
     func defaultBinding(_ key:String) -> Binding<String> { Binding(get:{store.report.defaults[key,default:""]},set:{v in store.change("Changed settings for next takes") { $0.setRecordingSetting(key,value:v) }}) }
     func entryBinding(_ id:String,_ key:String) -> Binding<String> { Binding(get:{store.report.entries.first{$0.id == id}?.values[key] ?? ""},set:{v in store.change { r in if let i = r.entries.firstIndex(where:{$0.id == id}) { if Schema.settings.contains(where: { $0.id == key }) { r.setRecordingSetting(key,value:v,takeID:id) } else { r.entries[i].values[key] = v; r.entries[i].reviewed = false } } }}) }
-    func field(_ f:Field,_ binding:Binding<String>) -> some View { VStack(alignment:.leading,spacing:4) { Text(f.title).font(.caption).foregroundStyle(.secondary); TextField(f.title,text:binding,axis:f.id.lowercased().contains("notes") || f.id == "remarks" ? .vertical : .horizontal).textFieldStyle(.roundedBorder).accessibilityLabel(f.title) }.padding(.vertical,2) }
+    @ViewBuilder func field(_ f:Field,_ binding:Binding<String>) -> some View {
+        if ["height","distance"].contains(f.id) {MeasurementField(title:f.title,raw:binding,unit:store.report.measurementUnit)} else { VStack(alignment:.leading,spacing:4) { Text(f.title).font(.caption).foregroundStyle(.secondary); TextField(f.title,text:binding,axis:f.id.lowercased().contains("notes") || f.id == "remarks" ? .vertical : .horizontal).textFieldStyle(.roundedBorder).accessibilityLabel(f.title) }.padding(.vertical,2) } }
     var today: some View {
         Form {
             Section("Local production") {
                 status
                 Picker("Open report",selection:Binding(get:{store.slot},set:{store.select($0)})) { Text(store.report.displayTitle).tag(store.slot); ForEach(store.documents.filter{$0.0 != store.slot},id:\.0) { doc in Text(doc.1).tag(doc.0) } }
-                Text("Report name follows Production title below.").font(.caption).foregroundStyle(.secondary)
+                Text("Report name combines Production title and Shooting day below.").font(.caption).foregroundStyle(.secondary)
                 Button { store.open(Report()); selected = nil } label: { Label("New blank report",systemImage:"plus").frame(maxWidth:.infinity,minHeight:32) }.buttonStyle(.borderedProminent)
             }
             Section("Production profile") {
                 Picker("Production profile",selection:Binding(get:{store.report.profile},set:{v in store.change("Changed profile; all values retained"){$0.profile = v}})) { ForEach(Schema.profiles,id:\.self) { Text($0) } }
             }
             Section("Project / crew · complete report") { ForEach(store.report.projectFields) { f in field(f,projectBinding(f.id)) } }
+            Section {
+                Button("Start New Day…") {do {nextDay=try store.newDayRequest()} catch {store.error=error.localizedDescription}}
+                    .buttonStyle(.borderedProminent).disabled(store.blocked || store.pendingImport || store.report.values["title",default:""].trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+                Text("Keeps this day's report and starts a separate next-day report with the production and crew information. Review the new date and shooting day in Today.").font(.caption)
+            }
         }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
     }
     var settings: some View {
         Form {
             Section("Production mode") {
-                Picker("Production mode",selection:Binding(get:{store.report.productionMode},set:{mode in store.change("Changed production mode; all values retained") {$0.productionMode=mode}})) {
-                    ForEach(ProductionMode.allCases) {mode in Text(mode.title).tag(mode)}
-                }.pickerStyle(.segmented)
+                HStack {ForEach(ProductionMode.allCases) {mode in SelectionButton(title:mode.title,selected:store.report.productionMode==mode) {store.change("Changed production mode; all values retained") {$0.productionMode=mode}}}}
                 Text("Movie hides Season and Episode. TV shows them in Today and reports. Hidden values are kept for this report.").font(.caption)
+            }
+            Section("Measurements") {
+                HStack {ForEach(MeasurementUnit.allCases) {unit in SelectionButton(title:unit.title,selected:store.report.measurementUnit==unit) {store.change("Changed measurement display units; original values retained") {$0.measurementUnit=unit}}}}
+                Text("This report uses feet/inches by default. Recognized values are converted for display and PDF; stored measurements stay unchanged until edited. Older values without units are kept as entered.").font(.caption)
             }
             Section("Trash") {
                 Text("Deleted reports are permanently removed after 14 days, when the app next opens or becomes active, and hourly while open. Restoring a report cancels its cleanup. Reports already in trash when this version first opens get a fresh 14 days.").font(.caption)
@@ -274,11 +287,24 @@ struct Workspace: View {
         VStack(alignment:.leading,spacing:16) {
             HStack { Text("Scene \(e.values["scene",default:""]) · Take \(e.values["take",default:""])").font(.largeTitle.bold()); Spacer() }
             LazyVGrid(columns:[GridItem(.adaptive(minimum:130))],alignment:.leading) {
-                ForEach(["Circle","MOS","Pickup","Tail slate","False roll","Technical issue"],id:\.self) { flag in Toggle(flag,isOn:Binding(get:{store.report.entries.first{$0.id == e.id}?.flags.contains(flag) == true},set:{on in store.change { r in if let i = r.entries.firstIndex(where:{$0.id == e.id}) { if on { r.entries[i].flags.insert(flag) } else { r.entries[i].flags.remove(flag) }; r.entries[i].reviewed = false } }})).toggleStyle(.button).buttonStyle(.bordered) }
+                ForEach(["Circle","MOS","Pickup","Tail slate","False roll","Technical issue"],id:\.self) { flag in
+                    SelectionButton(title:flag,selected:store.report.entries.first{$0.id==e.id}?.flags.contains(flag)==true) {
+                        store.change {r in if let i=r.entries.firstIndex(where:{$0.id==e.id}) {if r.entries[i].flags.contains(flag) {r.entries[i].flags.remove(flag)} else {r.entries[i].flags.insert(flag)};r.entries[i].reviewed=false}}
+                    }
+                }
             }
-            Picker("Detail",selection:$detail) { ForEach(["Quick","Standard","Full"],id:\.self) { Text($0) } }.pickerStyle(.segmented)
-            ForEach(Schema.take.filter{detail != "Quick" || ["scene","take","remarks"].contains($0.id)}) { f in field(f,entryBinding(e.id,f.id)) }
+            HStack {ForEach(["Quick","Standard","Full"],id:\.self) {level in SelectionButton(title:level,selected:detail==level) {detail=level}}}
+            ForEach(Schema.take.filter{!Schema.lighting.map(\.id).contains($0.id) && (detail != "Quick" || ["scene","take","remarks"].contains($0.id))}) { f in field(f,entryBinding(e.id,f.id)) }
             if detail != "Quick" { Divider(); Text("Recorded settings · changes also carry forward").font(.headline); ForEach(Schema.settings.filter{detail == "Full" || ["lens","stop","iso","temperature","camera","roll"].contains($0.id)}) { f in field(f,entryBinding(e.id,f.id)) } }
+            VStack(alignment:.leading,spacing:8) {
+                Text("Light meter at subject · optional").font(.headline)
+                HStack {
+                    TextField("Reading (e.g. 2.8 + 1/3)",text:Binding(get:{store.report.entries.first{$0.id==e.id}?.values["lightMeter"] ?? ""},set:{v in store.change {r in if let i=r.entries.firstIndex(where:{$0.id==e.id}) {r.entries[i].values["lightMeter"]=v;if r.entries[i].values["lightMeterUnit"]==nil {r.entries[i].values["lightMeterUnit"]="f-stop"};r.entries[i].reviewed=false}}})).textFieldStyle(.roundedBorder).accessibilityLabel("Light meter reading")
+                    Picker("Meter unit (as read)",selection:Binding(get:{store.report.entries.first{$0.id==e.id}?.values["lightMeterUnit"] ?? "f-stop"},set:{entryBinding(e.id,"lightMeterUnit").wrappedValue=$0})) {ForEach(LightMeterUnit.allCases) {unit in Text(unit.title).tag(unit.rawValue)}}
+                }
+                TextField("Subject / context (e.g. face · incident · ISO 800 · 1/48 s)",text:entryBinding(e.id,"lightMeterContext")).textFieldStyle(.roundedBorder).accessibilityLabel("Light meter subject and context")
+                Text("Enter the value and unit shown by your meter; unit selection labels the reading without converting it. For f-stop/EV, note ISO and shutter in context. Lens T-stop is separate. A new take starts with no meter reading.").font(.caption).foregroundStyle(.secondary)
+            }.padding(12).background(Color("Paper"),in:RoundedRectangle(cornerRadius:8))
             if store.report.active.filter({$0.id != e.id && $0.values["scene"] == e.values["scene"] && $0.values["take"] == e.values["take"] && $0.values["camera"] == e.values["camera"]}).count > 0 { Label("Duplicate scene / take / camera label. Review before export.",systemImage:"exclamationmark.triangle") }
             Toggle("Reviewed by me",isOn:Binding(get:{store.report.entries.first{$0.id == e.id}?.reviewed == true},set:{v in store.change("Changed take review") { r in if let i = r.entries.firstIndex(where:{$0.id == e.id}) { r.entries[i].reviewed = v } }}))
             Button("Remove take (recoverable)",role:.destructive) { store.change("Marked take deleted") { r in if let i = r.entries.firstIndex(where:{$0.id == e.id}) {r.entries[i].deleted = true} }; selected = nil }
@@ -308,7 +334,7 @@ struct Workspace: View {
                 if store.documents.isEmpty { Text("No saved reports. Create a blank report in Today.").foregroundStyle(.secondary) }
                 ForEach(store.documents,id:\.0) { doc in
                     HStack {
-                        Button {store.select(doc.0)} label:{Label(doc.1,systemImage:doc.0 == store.slot ? "doc.text.fill" : "doc.text").frame(maxWidth:.infinity,alignment:.leading)}
+                        Button {store.select(doc.0)} label:{Label(doc.1,systemImage:doc.0 == store.slot ? "checkmark.circle.fill" : "doc.text").frame(maxWidth:.infinity,alignment:.leading).padding(8).foregroundStyle(doc.0 == store.slot ? Color.white:Color.primary).background(doc.0 == store.slot ? Color("SelectionGreen"):Color.clear,in:RoundedRectangle(cornerRadius:6))}
                         Button(role:.destructive) {do {reportToDelete=try store.deletionRequest(for:doc.0)} catch {store.error=error.localizedDescription}} label:{Label("Delete Report",systemImage:"trash")}
                             .disabled(store.blocked || store.pendingImport)
                     }.buttonStyle(.borderless)
@@ -357,6 +383,11 @@ struct Workspace: View {
                 #else
                 Text("0.1 owner-test alpha · iOS 17 or later. Local files only. No accounts, telemetry, or cloud services. Export a backup to a second local destination regularly.").font(.caption)
                 #endif
+            }
+            Section("Next shooting day") {
+                Button("Start New Day…") {do {nextDay=try store.newDayRequest()} catch {store.error=error.localizedDescription}}
+                    .buttonStyle(.borderedProminent).disabled(store.blocked || store.pendingImport || store.report.values["title",default:""].trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+                Text("Creates a separate next-day report. The previous day is kept.").font(.caption)
             }
         }.formStyle(.grouped).scrollContentBackground(.hidden).background(Color("Canvas"))
     }

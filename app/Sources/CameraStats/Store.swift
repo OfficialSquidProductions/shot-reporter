@@ -64,6 +64,37 @@ import CameraStatsCore
         guard !archiveBusy else {return}
         do { guard let repository else {throw ReportError.invalid("Local database unavailable")}; let loaded=try repository.select(id); slot=id; report=loaded.report; fingerprint=loaded.fingerprint; blocked=false; saved=Date();reloadProject() } catch { self.error = error.localizedDescription }
     }
+    struct NewDayRequest:Identifiable {let id=UUID();let source:Repository.ProjectSourceVersion;let next:Report;let sourceName:String}
+    func newDayRequest()throws->NewDayRequest {
+        guard !blocked,!pendingImport,!archiveBusy,let repository else {throw ReportError.invalid("Finish recovery or import before starting a new day.")}
+        guard !report.values["title",default:""].trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {throw ReportError.invalid("Enter the Production title in Today first.")}
+        if fingerprint==nil {try persist(report)}
+        let snapshot=try repository.projectSnapshot(slot)
+        guard Exchange.digest(snapshot.current)==fingerprint else {throw ReportError.invalid("Reopen the changed source report before starting a new day.")}
+        return NewDayRequest(source:Repository.ProjectSourceVersion(slot:slot,fingerprint:fingerprint!,state:snapshot.state),next:try report.nextShootingDay(),sourceName:report.displayTitle)
+    }
+    func startNewDay(_ request:NewDayRequest)async {
+        guard !blocked,!pendingImport,!archiveBusy,let repository else {error="Finish the current file operation first.";return}
+        archiveBusy=true;archiveStatus="Creating a separate shooting-day report…";defer{archiveBusy=false;archiveStatus=nil}
+        let newSlot=UUID().uuidString,folder=resourcesRoot(newSlot),sourceFolder=resourcesRoot(request.source.slot)
+        do {
+            var next=request.next;next.record("Started new shooting day from \(request.sourceName)",device:device)
+            var state=request.source.state;state.resources=state.resources.filter{$0.kind=="attachment"}
+            try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+            let files=state.resources
+            try await Task.detached(priority:.userInitiated) {
+                for resource in files {
+                    let copied=try ProjectArchive.addFile(ProjectArchive.blobURL(sourceFolder,resource.sha256),kind:"attachment",to:folder)
+                    guard copied.sha256==resource.sha256,copied.size==resource.size else {throw ReportError.invalid("A reference attachment could not be verified; the previous day was preserved.")}
+                }
+            }.value
+            let snapshot=ProjectArchive.Snapshot(current:try Exchange.export(next,device:device),state:state)
+            adopt(try repository.importProject(snapshot,slot:newSlot,expectedSource:request.source));refresh()
+        } catch {
+            if let accepted=try? repository.load(newSlot) {adopt(accepted);refresh();self.error="The new report was saved but an operation reported an error. Review it before retrying. \(error.localizedDescription)"}
+            else {try? FileManager.default.removeItem(at:folder);self.error="New day was not created. Existing reports are unchanged. \(error.localizedDescription)"}
+        }
+    }
     func deletionRequest(for id:String) throws ->DeletionRequest {
         guard !blocked,!pendingImport,!archiveBusy else {throw ReportError.invalid("Resolve recovery or import before deleting a report.")}
         guard let repository else {throw ReportError.invalid("Local database unavailable")}

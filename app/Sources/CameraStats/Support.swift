@@ -174,3 +174,36 @@ struct ArchiveExportPicker:UIViewControllerRepresentable {
     }
 }
 #endif
+
+/// A strong selected fill, explicit checkmark and accessible state work in both color schemes.
+struct SelectionButton:View {
+    var title:String;var selected:Bool;var action:()->Void
+    var body:some View {
+        Button(action:action) {
+            HStack(spacing:6) {Image(systemName:selected ? "checkmark.circle.fill":"circle");Text(title).multilineTextAlignment(.center)}
+                .frame(maxWidth:.infinity,minHeight:44).padding(.horizontal,10)
+                .foregroundStyle(selected ? Color.white:Color.primary)
+                .background(selected ? Color("SelectionGreen"):Color("Paper"),in:RoundedRectangle(cornerRadius:8))
+                .overlay(RoundedRectangle(cornerRadius:8).stroke(selected ? Color("SelectionGreen"):Color.primary.opacity(0.35),lineWidth:selected ? 2:1))
+        }.buttonStyle(.plain).accessibilityLabel(title).accessibilityValue(selected ? "Selected":"Not selected").accessibilityAddTraits(selected ? .isSelected:[])
+    }
+}
+struct MeasurementField:View {
+    var title:String;@Binding var raw:String;var unit:MeasurementUnit
+    @FocusState private var focused:Bool
+    @State private var draft=""
+    var body:some View {
+        VStack(alignment:.leading,spacing:4) {
+            Text("\(title) (\(unit.symbol))").font(.caption).foregroundStyle(.secondary)
+            TextField(unit.example,text:Binding(get:{focused ? draft:LengthMeasurement.display(raw,unit:unit)},set:{text in draft=text;raw=LengthMeasurement.edited(text,unit:unit)}))
+                .textFieldStyle(.roundedBorder).focused($focused).autocorrectionDisabled().accessibilityLabel("\(title) (\(unit.symbol))")
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .onChange(of:focused) {_,value in if value {draft=LengthMeasurement.display(raw,unit:unit)}}
+            if !raw.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,LengthMeasurement.meters(raw)==nil {
+                Text("Kept as entered. Add explicit units to convert this value when changing measurement units.").font(.caption2).foregroundStyle(.secondary)
+            }
+        }.padding(.vertical,2)
+    }
+}
