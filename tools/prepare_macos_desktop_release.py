@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--app-input', type=Path, help='Existing unsigned Release app; omitted builds current Xcode project')
     parser.add_argument('--version', default='0.2.0-alpha.13')
-    parser.add_argument('--build', type=int, default=16)
+    parser.add_argument('--build', type=int, default=17)
     parser.add_argument('--public-update-key', help='Public Ed25519 key only; never pass a private key')
     parser.add_argument('--unsandboxed-host', action='store_true', help='Explicit direct-distribution model; requires data-root compatibility acceptance')
     parser.add_argument('--allow-dirty', action='store_true', help='Review candidate only; manifest forbids public release until rebuilt clean')

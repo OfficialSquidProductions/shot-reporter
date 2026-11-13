@@ -5,7 +5,7 @@ import json, shutil, plistlib, argparse, re
 parser=argparse.ArgumentParser()
 parser.add_argument('--distribution',choices=['development','direct','testflight','appstore'],default='development')
 parser.add_argument('--version',default='0.2.0',help='Three-part numeric Apple marketing version')
-parser.add_argument('--build',type=int,default=16,help='Monotonic positive Apple build number')
+parser.add_argument('--build',type=int,default=17,help='Monotonic positive Apple build number')
 args=parser.parse_args()
 if not re.fullmatch(r'\d+\.\d+\.\d+',args.version) or args.build < 1:
     parser.error('--version must have three numeric components and --build must be positive')

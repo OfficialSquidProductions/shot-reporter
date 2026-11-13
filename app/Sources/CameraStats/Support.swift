@@ -191,16 +191,26 @@ struct SelectionButton:View {
 struct MeasurementField:View {
     var title:String;@Binding var raw:String;var unit:MeasurementUnit
     @FocusState private var focused:Bool
-    @State private var draft=""
+    @State private var draft:String
+    init(title:String,raw:Binding<String>,unit:MeasurementUnit) {
+        self.title=title;self._raw=raw;self.unit=unit
+        self._draft=State(initialValue:LengthMeasurement.display(raw.wrappedValue,unit:unit))
+    }
     var body:some View {
         VStack(alignment:.leading,spacing:4) {
             Text("\(title) (\(unit.symbol))").font(.caption).foregroundStyle(.secondary)
-            TextField(unit.example,text:Binding(get:{focused ? draft:LengthMeasurement.display(raw,unit:unit)},set:{text in draft=text;raw=LengthMeasurement.edited(text,unit:unit)}))
+            TextField(unit.example,text:Binding(get:{draft},set:{text in
+                // Focus and programmatic display refreshes are not edits. Keep the
+                // initialized draft stable, and commit only actual changed input.
+                guard text != draft else {return};draft=text;raw=LengthMeasurement.edited(text,unit:unit)
+            }))
                 .textFieldStyle(.roundedBorder).focused($focused).autocorrectionDisabled().accessibilityLabel("\(title) (\(unit.symbol))")
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
                 #endif
-                .onChange(of:focused) {_,value in if value {draft=LengthMeasurement.display(raw,unit:unit)}}
+                .onChange(of:focused) {_,value in if !value {draft=LengthMeasurement.display(raw,unit:unit)}}
+                .onChange(of:raw) {_,value in if !focused {draft=LengthMeasurement.display(value,unit:unit)}}
+                .onChange(of:unit) {_,value in draft=LengthMeasurement.display(raw,unit:value)}
             if !raw.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,LengthMeasurement.meters(raw)==nil {
                 Text("Kept as entered. Add explicit units to convert this value when changing measurement units.").font(.caption2).foregroundStyle(.secondary)
             }

@@ -279,7 +279,7 @@ struct Workspace: View {
                 Text("Next take uses the camera and recording settings in this log. Reload creates a fresh load ID; enter the new SSD / mag here before logging.").font(.caption).foregroundStyle(.secondary)
                 recordingSettings
                 Picker("Take",selection:$selected) { Text("Choose take").tag(String?.none); ForEach(store.report.active.reversed()) { e in Text("\(e.values["scene",default:"?"]) / \(e.values["take",default:"?"]) · \(e.values["camera",default:""])").tag(Optional(e.id)) } }
-                if let id = selected, let e = store.report.entries.first(where:{$0.id == id && !$0.deleted}) { takeEditor(e) } else { ContentUnavailableView("Ready for the next slate",systemImage:"camera",description:Text("Enter the scene, then add a take. All logging works offline.")) }
+                if let id = selected, let e = store.report.entries.first(where:{$0.id == id && !$0.deleted}) { takeEditor(e).id(e.id) } else { ContentUnavailableView("Ready for the next slate",systemImage:"camera",description:Text("Enter the scene, then add a take. All logging works offline.")) }
             }.padding(20).frame(maxWidth:900,alignment:.leading).frame(maxWidth:.infinity)
         }
     }
