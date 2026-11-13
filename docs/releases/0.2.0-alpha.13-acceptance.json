@@ -1,0 +1,128 @@
+{
+  "version": "0.2.0-alpha.13",
+  "build": 17,
+  "sourceCommit": "e65f3aef6ebdd0019ff0ee7914214f9e97c713d8",
+  "archiveSHA256": "abea1131a3fc2fb5b04800ce34fd22bba353202c1425a8c7ba5564575a8e8a52",
+  "developerIDSignedNotarizedStapled": true,
+  "publicAnonymousArchiveVerified": true,
+  "nativeSignedUpgrade": {
+    "from": "Exact public alpha.12 / build 15",
+    "to": "Exact public alpha.13 / build 17",
+    "authenticatedStagedFeedAndArchive": true,
+    "saveInstallAndAutomaticRelaunch": true,
+    "automaticRelaunch": true,
+    "installedBundleMatchesEveryNotarizedFileAndSymlink": true,
+    "localSchemaUnchanged": 4,
+    "allSavedAndDeletedReportsAndCurrentPreviousBlobsUnchanged": true,
+    "deletionDatesTokensCatalogsAndSelectionUnchanged": true,
+    "temporaryLaunchContextRestored": true
+  },
+  "nativeDayUnitMeterUI": {
+    "passed": true,
+    "sourceAndTrashSnapshotsUnchanged": true,
+    "freshSlot": true,
+    "day": 2,
+    "date": "2026-11-13",
+    "entries": 0,
+    "referenceObservedInUI": true,
+    "focusWithNoTypingSnapshotsIdentical": true,
+    "cm167_64DisplayedAsFeet5Inches6": true,
+    "build": 17,
+    "defaultAndRecordedTakeFocusWithoutTypingByteIdentical": true,
+    "centimeters167_64DisplaysFeet5Inches6": true,
+    "otherTakeHeightAndMeterUnchanged": true,
+    "lightMeterValueAndContextPersisted": true,
+    "legacyRateBoxesAbsent": true,
+    "cancelNewDayDidNotChangeDatabase": true,
+    "nativeNewDayExportContainsVerifiedReferenceBytesAndPreferences": true,
+    "selectedFlagsVisibleDarkGreenWhiteCheckmark": true,
+    "usedRealUserData": false
+  },
+  "nativeIOSMacArchiveRoundTrip": {
+    "result": "PASS",
+    "runtime": "iOS 26.5 26.5",
+    "nativeIOSReadPersistEditExport": true,
+    "nativeMacReadPersistReExport": true,
+    "everyReportModelFieldCompared": true,
+    "productionTitleRenamedOnNativeIOSAndPreservedOnMac": true,
+    "newDayKeptCrewReferencesAndSourceWithoutPriorDayTakesOrMedia": true,
+    "unitDisplayAndLightMeterAndLegacyRatesPreserved": true,
+    "blankTitleFallbackWithoutMutation": true,
+    "allFileSHA256Compared": true,
+    "mediaOver32MiB": true,
+    "unicodeBinaryAttachment": true,
+    "preferencesAndRecoveriesPreserved": true,
+    "fixture": {
+      "cameras": 2,
+      "totalTakes": 6,
+      "activeTakes": 5,
+      "hiddenMovieSeasonEpisode": true,
+      "unicodeAndMultilineNotes": true,
+      "customMapValues": true,
+      "namingSettingsAndLegacyFields": true,
+      "deletedTakeAndHistory": true
+    },
+    "limits": [
+      "Synthetic compiled-core probe, not physical iPhone UI or AirDrop/iCloud delivery",
+      "One complete open report; unrelated saved reports and OS backups are not silently bundled",
+      "Includes explicitly added files; filename text does not grant access to media",
+      "Stored ZIP64, 1 TiB total, 8 MiB metadata, 19,989 resources; available disk space required",
+      "All app-owned preferences retained as archive data; only reviewed appearance/detail preferences applied",
+      "Synthetic 35 MiB media; >4 GiB physical media and real AirDrop remain field checks"
+    ],
+    "usedRealUserData": false
+  },
+  "tests": {
+    "swiftPassed": 92,
+    "packagingPassed": 26,
+    "forcedCrashPersistence": "PASS",
+    "renderedPDFInspection": "PASS"
+  },
+  "ownerData": {
+    "rootsChecked": 2,
+    "reportTrashSnapshotAndSelectionFingerprintsUnchanged": true,
+    "ownerInstalledAppNotReplaced": true,
+    "noOwnerTrashPurge": true
+  },
+  "productionFeedVerified": true,
+  "productionFeedSHA256": "23c735a281f762135857a97f3c47fc80ae33d9020993425ba8a16538cc260aea",
+  "testflight": {
+    "version": "0.2.0",
+    "build": 17,
+    "checkedAtUTC": "2026-11-13T01:08:03.616572+00:00",
+    "group": "Owner Testing",
+    "testerCount": 1,
+    "macOS": {
+      "upload": "success",
+      "status": "Testing",
+      "buildID": "36b267ae-1b49-4efb-b08d-efe3b1e22fa8",
+      "whatToTestSaved": true,
+      "groupAssigned": true
+    },
+    "iOS": {
+      "upload": "success",
+      "status": "Testing",
+      "buildID": "c2ee9191-91cc-4dbb-8397-a66a3dccda95",
+      "whatToTestSaved": true,
+      "groupAssigned": true,
+      "phoneAvailabilityVerified": true
+    },
+    "externalTestersAdded": false,
+    "publicAppStoreSubmission": false,
+    "noDuplicateUpload": true,
+    "bothPlatformsTestingVerifiedInExistingGroup": true,
+    "supersededBuild16AssignedToTesters": false,
+    "physicalPhoneInstalledBuild17Verified": false
+  },
+  "supersededCandidate": {
+    "build": 16,
+    "publicGitHubRelease": false,
+    "assignedToTesters": false,
+    "reason": "Native measurement-focus regression caught and corrected before distribution"
+  },
+  "limits": [
+    "Physical iPhone UI and AirDrop delivery remain field checks",
+    "Windows/Android binaries unchanged; legacy report-only export remains available"
+  ],
+  "existingTrashPolicy": "14-day cleanup remains active; no owner report or trash was purged during development/testing"
+}
